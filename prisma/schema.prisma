@@ -1,0 +1,270 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum IncidentStatus {
+  ACTIVE
+  RESOLVED
+  CLOSED
+}
+
+enum Severity {
+  SEV1
+  SEV2
+  SEV3
+  SEV4
+}
+
+enum ParticipantRole {
+  INCIDENT_COMMANDER
+  ENGINEER
+  SRE
+  SUPPORT
+  PRODUCT
+  BUSINESS
+  OBSERVER
+}
+
+enum ActionStatus {
+  PENDING
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  CANCELLED
+}
+
+enum EvidenceStatus {
+  CONFIRMED
+  REPORTED
+  UNCONFIRMED
+  CONFLICTING
+}
+
+enum SourceType {
+  HUMAN_SPOKEN
+  MONITORING
+  DEPLOYMENT_SYSTEM
+  SLACK
+  JIRA
+  PAGERDUTY
+  MANUAL_CONFIRMATION
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum IntegrationType {
+  SLACK
+  JIRA
+  MONITORING
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  name         String
+  role         ParticipantRole @default(ENGINEER)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  participants Participant[]
+  assignedActions ActionItem[]
+}
+
+model Incident {
+  id           String         @id @default(uuid())
+  title        String
+  description  String?
+  severity     Severity       @default(SEV3)
+  status       IncidentStatus @default(ACTIVE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  participants Participant[]
+  transcripts  Transcript[]
+  facts        Fact[]
+  hypotheses   Hypothesis[]
+  decisions    Decision[]
+  actions      ActionItem[]
+  conflicts    Conflict[]
+  questions    OpenQuestion[]
+  timeline     TimelineEvent[]
+  approvals    ApprovalRequest[]
+  summaries    IncidentSummary[]
+}
+
+model Participant {
+  id         String          @id @default(uuid())
+  incidentId String
+  incident   Incident        @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       ParticipantRole @default(ENGINEER)
+  joinedAt   DateTime        @default(now())
+  leftAt     DateTime?
+
+  transcripts Transcript[]
+
+  @@unique([incidentId, userId])
+}
+
+model Transcript {
+  id            String       @id @default(uuid())
+  incidentId    String
+  incident      Incident     @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  participantId String?
+  participant   Participant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  speakerName   String
+  text          String
+  timestamp     DateTime     @default(now())
+  createdAt     DateTime     @default(now())
+}
+
+model Fact {
+  id          String         @id @default(uuid())
+  incidentId  String
+  incident    Incident       @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  status      EvidenceStatus @default(REPORTED)
+  evidence    Json           // Store source details as JSON matching EvidenceMetadata
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model Hypothesis {
+  id          String         @id @default(uuid())
+  incidentId  String
+  incident    Incident       @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  status      EvidenceStatus @default(REPORTED)
+  evidence    Json
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model Decision {
+  id          String       @id @default(uuid())
+  incidentId  String
+  incident    Incident     @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  decidedBy   String       // User/Participant name or ID
+  evidence    Json
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model ActionItem {
+  id              String                @id @default(uuid())
+  incidentId      String
+  incident        Incident              @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  title           String                // task
+  description     String
+  status          ActionStatus          @default(PENDING)
+  assigneeId      String?
+  assignee        User?                 @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  evidence        Json                  // stores source provenance metadata
+  dueAt           DateTime?
+  blockedReason   String?
+  completionNotes String?
+  history         ActionStatusHistory[]
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+}
+
+model ActionStatusHistory {
+  id           String       @id @default(uuid())
+  actionItemId String
+  actionItem   ActionItem   @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
+  oldStatus    ActionStatus
+  newStatus    ActionStatus
+  changedBy    String       // Name or ID of changer
+  notes        String?      // Stores completionNotes or blockedReason if applicable
+  createdAt    DateTime     @default(now())
+}
+
+model Conflict {
+  id         String    @id @default(uuid())
+  incidentId String
+  incident   Incident  @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  topic      String
+  claimA     String
+  claimB     String
+  sourceA    Json
+  sourceB    Json
+  status     String    @default("UNRESOLVED") // UNRESOLVED, RESOLVED
+  detectedAt DateTime  @default(now())
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model OpenQuestion {
+  id          String   @id @default(uuid())
+  incidentId  String
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  resolved    Boolean  @default(false)
+  evidence    Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TimelineEvent {
+  id            String   @id @default(uuid())
+  incidentId    String
+  incident      Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  eventType     String   // e.g. "FACT", "DECISION", "ACTION_COMPLETED"
+  description   String
+  timestamp     DateTime @default(now())
+  source        Json
+  relatedEntity String?  // e.g. "Fact:uuid" or "ActionItem:uuid"
+  confidence    Float?
+  createdAt     DateTime @default(now())
+}
+
+model ApprovalRequest {
+  id            String         @id @default(uuid())
+  incidentId    String
+  incident      Incident       @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  actionTitle   String
+  actionDetails String
+  requestedBy   String         // e.g. "AI Incident Commander" or user name
+  status        ApprovalStatus @default(PENDING)
+  approvedBy    String?
+  rejectedBy    String?
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+  evidence      Json?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model IntegrationConnection {
+  id        String          @id @default(uuid())
+  type      IntegrationType
+  config    Json            // Credentials/URL configuration stored securely/mocked
+  status    Boolean         @default(true) // active/inactive
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model IncidentSummary {
+  id          String   @id @default(uuid())
+  incidentId  String
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  summaryText String
+  createdBy   String   // e.g. "AI" or user name
+  createdAt   DateTime @default(now())
+}
