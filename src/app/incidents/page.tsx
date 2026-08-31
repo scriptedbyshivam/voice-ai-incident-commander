@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { motion } from 'motion/react';
 import { useTheme } from '@/components/ThemeProvider';
 import ThemeToggle from '@/components/ThemeToggle';
-import { Zap, Plus, ArrowRight, Activity, AlertCircle, Clock, ShieldAlert } from 'lucide-react';
+import { Zap, Plus, ArrowRight, Activity, AlertCircle, Clock, ShieldAlert, Radio, AlertTriangle } from 'lucide-react';
 
 interface Incident {
   id: string;
@@ -31,20 +31,20 @@ export default function IncidentsList() {
         setIncidents(data);
       } catch (err: any) {
         setError(err.message);
-        // Load fallback mock data for offline development
+        // Fallback simulated incidents for offline development
         setIncidents([
           {
             id: 'payment-api-outage-mock-id',
-            title: 'Payment API Outage',
-            description: 'Spike in checkout and credit card processing failure rates.',
+            title: 'Payment Gateway API Outage',
+            description: 'Spike in checkout and credit card processing failure rates across EU-Central cluster.',
             severity: 'SEV1',
             status: 'ACTIVE',
             createdAt: new Date(Date.now() - 3600 * 1000).toISOString(),
           },
           {
             id: 'auth-latency-mock-id',
-            title: 'User Authentication Latency spike',
-            description: 'Cognito integration reports latency > 2.5s on login request.',
+            title: 'Cognito Authentication Latency Spike',
+            description: 'User authentication integration reports latency > 2.5s on OAuth login request handler.',
             severity: 'SEV2',
             status: 'RESOLVED',
             createdAt: new Date(Date.now() - 86400 * 1000).toISOString(),
@@ -59,172 +59,174 @@ export default function IncidentsList() {
 
   return (
     <div
-      className={`min-h-screen font-sans pb-16 transition-colors duration-300 ${
-        isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
+      className={`min-h-screen font-sans pb-16 transition-colors duration-300 flex flex-col ${
+        isDark ? 'bg-[#141720] text-[#f1f5f9]' : 'bg-[#e0e5ec] text-[#2d3436]'
       }`}
     >
-      {/* Header */}
-      <header
-        className={`border-b backdrop-blur-md sticky top-0 z-50 transition-colors duration-300 ${
-          isDark
-            ? 'border-slate-800/80 bg-slate-950/75'
-            : 'border-slate-200/80 bg-white/75 shadow-xs'
-        }`}
-      >
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      {/* Industrial Machine Header */}
+      <header className="sticky top-0 z-40 px-6 py-4">
+        <div
+          className={`max-w-7xl mx-auto px-6 h-16 rounded-2xl flex items-center justify-between border transition-all duration-300 shadow-industrial-card ${
+            isDark ? 'bg-[#1b202c]/90 border-[#232a3a]' : 'bg-[#f0f2f5]/90 border-white/60'
+          }`}
+        >
           <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-md shadow-indigo-500/25"
+              className="w-9 h-9 rounded-xl bg-[#ff4757] text-white flex items-center justify-center font-bold shadow-industrial-accent active:translate-y-0.5"
             >
-              <Zap className="w-4 h-4 fill-white text-white" />
+              <Zap className="w-5 h-5 fill-white" />
             </Link>
-            <span
-              className={`font-bold text-xl tracking-tight bg-clip-text text-transparent ${
-                isDark
-                  ? 'bg-gradient-to-r from-white via-slate-100 to-slate-300'
-                  : 'bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950'
-              }`}
-            >
-              AI Incident Commander
-            </span>
+            <div>
+              <span className="font-extrabold text-base tracking-tight font-sans embossed-text block leading-none">
+                Incident Control Center
+              </span>
+              <span className="text-[9px] font-mono text-[#4a5568] dark:text-[#94a3b8] uppercase font-bold">
+                TELEMETRY DISPATCH DECK
+              </span>
+            </div>
           </div>
 
           <div className="flex items-center gap-3 sm:gap-4">
             <Link
               href="/incidents/new"
-              className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 rounded-lg shadow-md shadow-indigo-500/25 hover:shadow-indigo-500/35 transition-all flex items-center gap-1.5"
+              className="btn-mechanical-primary px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Declare Incident</span>
+              <span>Declare Outage</span>
             </Link>
 
-            <div className={`h-5 w-[1px] ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+            <div className="h-6 w-1 rounded-full bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed" />
 
             <ThemeToggle />
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-12 space-y-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Main Operations Dashboard */}
+      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8 flex-1 w-full">
+        {/* Title Deck */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-black/5 dark:border-white/10 pb-6">
           <div>
-            <h1 className={`text-3xl font-extrabold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed text-[10px] font-mono font-bold text-slate-700 dark:text-slate-300 mb-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 led-glow-green animate-pulse" />
+              <span>LIVE INCIDENT REGISTRY // CLUSTER US-EAST</span>
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight embossed-text font-sans">
               Operational Incidents
             </h1>
-            <p className={`mt-1 text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+            <p className="mt-1 text-sm text-[#4a5568] dark:text-[#94a3b8] font-medium">
               Real-time situational dashboard for live outages and resolved post-mortems.
             </p>
+          </div>
+
+          {/* Quick Metrics Cartridge */}
+          <div className="flex items-center gap-3">
+            <div className="px-4 py-2.5 rounded-xl bg-[#d1d9e6]/60 dark:bg-[#0e1017]/60 shadow-industrial-recessed font-mono text-center">
+              <div className="text-[9px] uppercase font-bold text-slate-500">ACTIVE</div>
+              <div className="text-lg font-black text-[#ff4757] mt-0.5">
+                {incidents.filter((i) => i.status === 'ACTIVE').length}
+              </div>
+            </div>
+            <div className="px-4 py-2.5 rounded-xl bg-[#d1d9e6]/60 dark:bg-[#0e1017]/60 shadow-industrial-recessed font-mono text-center">
+              <div className="text-[9px] uppercase font-bold text-slate-500">RESOLVED</div>
+              <div className="text-lg font-black text-emerald-500 mt-0.5">
+                {incidents.filter((i) => i.status === 'RESOLVED').length}
+              </div>
+            </div>
           </div>
         </div>
 
         {error && (
-          <div
-            className={`p-4 rounded-xl border flex items-center gap-3 text-sm ${
-              isDark
-                ? 'bg-amber-950/30 border-amber-800/50 text-amber-300'
-                : 'bg-amber-50 border-amber-200 text-amber-800'
-            }`}
-          >
-            <AlertCircle className="w-5 h-5 shrink-0" />
-            <span>Note: Database connection fallback mode active. Showing simulated incidents.</span>
+          <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-800/40 text-amber-300 text-xs font-mono flex items-center gap-3">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>Database offline fallback mode active. Showing simulated incident records.</span>
           </div>
         )}
 
         {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+          <div className="flex flex-col items-center justify-center py-24 space-y-4">
+            <div className="w-10 h-10 border-4 border-[#ff4757] border-t-transparent rounded-full animate-spin" />
+            <span className="font-mono text-xs text-slate-500 uppercase tracking-widest font-bold">
+              POLLING INCIDENT BUS...
+            </span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-5">
             {incidents.map((incident) => {
               const isSev1 = incident.severity === 'SEV1';
               const isSev2 = incident.severity === 'SEV2';
-              const isSev3 = incident.severity === 'SEV3';
+              const isActive = incident.status === 'ACTIVE';
 
               return (
                 <motion.div
                   key={incident.id}
-                  whileHover={{ y: -2 }}
-                  transition={{ duration: 0.2 }}
+                  whileHover={{ y: -3 }}
+                  transition={{ duration: 0.18 }}
                 >
                   <Link
                     href={`/incidents/${incident.id}`}
-                    className={`p-6 rounded-2xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 group block ${
+                    className={`p-6 sm:p-7 rounded-3xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 group block shadow-industrial-card hover:shadow-industrial-floating corner-screws ${
                       isDark
-                        ? 'bg-slate-900/60 border-slate-800/80 hover:border-indigo-500/50 hover:bg-slate-900/90 shadow-xl'
-                        : 'bg-white border-slate-200/90 hover:border-indigo-300 hover:shadow-lg shadow-sm'
+                        ? 'bg-[#1b202c] border-[#232a3a]'
+                        : 'bg-[#f0f2f5] border-white'
                     }`}
                   >
-                    <div className="space-y-2.5 max-w-3xl">
-                      <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="space-y-3 max-w-3xl">
+                      {/* Hardware Badges Row */}
+                      <div className="flex flex-wrap items-center gap-2.5 font-mono text-xs">
+                        {/* Stamped SEV Metal Plate */}
                         <span
-                          className={`text-xs font-extrabold px-2.5 py-0.5 rounded-md border ${
+                          className={`px-3 py-1 rounded-lg text-xs font-extrabold uppercase tracking-wider ${
                             isSev1
-                              ? isDark
-                                ? 'bg-rose-950/80 text-rose-300 border-rose-800/80 animate-pulse'
-                                : 'bg-rose-50 text-rose-700 border-rose-200'
+                              ? 'bg-[#ff4757] text-white shadow-industrial-accent'
                               : isSev2
-                              ? isDark
-                                ? 'bg-orange-950/80 text-orange-300 border-orange-800/80'
-                                : 'bg-orange-50 text-orange-700 border-orange-200'
-                              : isSev3
-                              ? isDark
-                                ? 'bg-amber-950/80 text-amber-300 border-amber-800/80'
-                                : 'bg-amber-50 text-amber-700 border-amber-200'
-                              : isDark
-                              ? 'bg-slate-800 text-slate-300 border-slate-700'
-                              : 'bg-slate-100 text-slate-700 border-slate-200'
+                              ? 'bg-amber-500 text-white shadow-md'
+                              : 'bg-[#d1d9e6] dark:bg-[#0e1017] text-slate-700 dark:text-slate-300 shadow-industrial-recessed'
                           }`}
                         >
                           {incident.severity}
                         </span>
 
+                        {/* Status Beacon */}
                         <span
-                          className={`text-[10px] uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-full border ${
-                            incident.status === 'ACTIVE'
-                              ? isDark
-                                ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/50'
-                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : isDark
-                              ? 'bg-slate-800 text-slate-400 border-slate-700'
-                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            isActive
+                              ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/60'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
                           }`}
                         >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              isActive ? 'bg-emerald-400 led-glow-green animate-pulse' : 'bg-slate-500'
+                            }`}
+                          />
                           {incident.status}
                         </span>
 
-                        <span className={`text-xs flex items-center gap-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                        <span className="text-[11px] text-[#4a5568] dark:text-[#94a3b8] flex items-center gap-1.5">
                           <Clock className="w-3.5 h-3.5" />
-                          Declared: {new Date(incident.createdAt).toLocaleDateString()} at {new Date(incident.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(incident.createdAt).toLocaleDateString()} // {new Date(incident.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
 
-                      <h3
-                        className={`text-xl font-bold transition-colors ${
-                          isDark
-                            ? 'text-white group-hover:text-indigo-400'
-                            : 'text-slate-900 group-hover:text-indigo-600'
-                        }`}
-                      >
+                      {/* Incident Title */}
+                      <h3 className="text-xl sm:text-2xl font-bold font-sans tracking-tight group-hover:text-[#ff4757] transition-colors">
                         {incident.title}
                       </h3>
 
-                      <p className={`text-sm leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                        {incident.description || 'No description provided.'}
+                      {/* Incident Description */}
+                      <p className="text-sm text-[#4a5568] dark:text-[#94a3b8] leading-relaxed">
+                        {incident.description || 'No outage description provided.'}
                       </p>
                     </div>
 
-                    <div
-                      className={`transition-colors shrink-0 flex items-center gap-1 font-semibold text-sm ${
-                        isDark
-                          ? 'text-indigo-400 group-hover:translate-x-1'
-                          : 'text-indigo-600 group-hover:translate-x-1'
-                      }`}
-                    >
-                      <span className="hidden sm:inline">Open Hub</span>
-                      <ArrowRight className="w-5 h-5 transition-transform" />
+                    {/* Launch Hub Key */}
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className="btn-mechanical-chassis px-5 py-3 rounded-2xl font-mono text-xs font-bold uppercase tracking-wider group-hover:text-[#ff4757] flex items-center gap-2 border border-white/40 dark:border-white/5">
+                        <span>Command Hub</span>
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      </span>
                     </div>
                   </Link>
                 </motion.div>
