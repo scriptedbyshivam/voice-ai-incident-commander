@@ -12,64 +12,58 @@ export default function ThemeToggle({ className = '' }: ThemeToggleProps) {
   const { theme, isDark, toggleTheme, mounted } = useTheme();
 
   if (!mounted) {
-    return <div className="w-14 h-8" />;
+    return <div className="w-16 h-8 rounded-full bg-slate-300 dark:bg-slate-800 opacity-50" />;
   }
 
   return (
     <motion.button
       layout
       onClick={toggleTheme}
-      aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
-      title={`Switch to ${isDark ? 'Light' : 'Dark'} theme`}
-      whileTap={{ scale: 0.92 }}
-      className={`relative w-14 h-8 p-1 rounded-full border flex items-center cursor-pointer transition-colors duration-300 shadow-inner ${
-        isDark
-          ? 'bg-slate-900/90 border-slate-700/80 shadow-black/40'
-          : 'bg-indigo-50/90 border-indigo-200/80 shadow-indigo-100/50'
+      aria-label={`Switch to ${isDark ? 'light' : 'dark'} industrial chassis mode`}
+      title={`Switch to ${isDark ? 'Light' : 'Dark'} Industrial Theme`}
+      whileTap={{ scale: 0.94 }}
+      className={`relative w-16 h-8 p-1 rounded-full flex items-center cursor-pointer transition-all duration-300 shadow-industrial-recessed select-none ${
+        isDark ? 'bg-[#0e1017]' : 'bg-[#d1d9e6]'
       } ${className}`}
       style={{ justifyContent: isDark ? 'flex-end' : 'flex-start' }}
     >
-      {/* Background faint track icons */}
-      <div className="absolute inset-0 flex items-center justify-between px-2 text-[10px] pointer-events-none select-none">
-        <Sun
-          className={`w-3.5 h-3.5 transition-opacity duration-300 ${
-            !isDark ? 'opacity-0' : 'opacity-40 text-amber-400'
-          }`}
-        />
-        <Moon
-          className={`w-3.5 h-3.5 transition-opacity duration-300 ${
-            isDark ? 'opacity-0' : 'opacity-40 text-indigo-500'
-          }`}
-        />
+      {/* Background track indicator markers */}
+      <div className="absolute inset-0 flex items-center justify-between px-2.5 text-[9px] pointer-events-none select-none font-mono font-bold">
+        <span className={`transition-opacity duration-300 ${!isDark ? 'opacity-0' : 'opacity-40 text-amber-400'}`}>
+          <Sun className="w-3.5 h-3.5" />
+        </span>
+        <span className={`transition-opacity duration-300 ${isDark ? 'opacity-0' : 'opacity-40 text-slate-700'}`}>
+          <Moon className="w-3.5 h-3.5" />
+        </span>
       </div>
 
-      {/* Animated sliding knob with spring physics */}
+      {/* Tactile Machined Toggle Knob */}
       <motion.div
         layout
         transition={{
           type: 'spring',
-          stiffness: 700,
-          damping: 30,
+          stiffness: 650,
+          damping: 28,
         }}
-        className={`w-6 h-6 rounded-full flex items-center justify-center shadow-md relative z-10 ${
+        className={`w-6 h-6 rounded-full flex items-center justify-center relative z-10 transition-colors shadow-industrial-sharp ${
           isDark
-            ? 'bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white shadow-indigo-500/30'
-            : 'bg-white text-amber-500 shadow-slate-300/80 border border-slate-200/60'
+            ? 'bg-[#232a3a] text-amber-400 border border-[#2f384c]'
+            : 'bg-[#f0f2f5] text-[#2d3436] border border-white'
         }`}
       >
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={theme}
-            initial={{ rotate: isDark ? -90 : 90, scale: 0.4, opacity: 0 }}
+            initial={{ rotate: isDark ? -90 : 90, scale: 0.35, opacity: 0 }}
             animate={{ rotate: 0, scale: 1, opacity: 1 }}
-            exit={{ rotate: isDark ? 90 : -90, scale: 0.4, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            exit={{ rotate: isDark ? 90 : -90, scale: 0.35, opacity: 0 }}
+            transition={{ duration: 0.18 }}
             className="flex items-center justify-center"
           >
             {isDark ? (
               <Moon className="w-3.5 h-3.5" />
             ) : (
-              <Sun className="w-3.5 h-3.5" />
+              <Sun className="w-3.5 h-3.5 text-amber-500" />
             )}
           </motion.div>
         </AnimatePresence>
