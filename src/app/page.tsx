@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Sun,
   Moon,
@@ -114,35 +115,67 @@ export default function Home() {
               }`}
             />
 
-            {/* Theme Toggle Button (Top-Right Corner) */}
+            {/* Theme Toggle Button with Motion Layout Animation (Top-Right Corner) */}
             {mounted && (
-              <button
+              <motion.button
+                layout
                 onClick={toggleTheme}
                 aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
                 title={`Switch to ${isDark ? 'Light' : 'Dark'} theme`}
-                className={`relative w-9 h-9 rounded-xl border flex items-center justify-center cursor-pointer transition-all duration-300 active:scale-90 hover:scale-105 ${
+                whileTap={{ scale: 0.92 }}
+                className={`relative w-14 h-8 p-1 rounded-full border flex items-center cursor-pointer transition-colors duration-300 shadow-inner ${
                   isDark
-                    ? 'bg-slate-900/90 border-slate-800 text-amber-400 hover:bg-slate-800 hover:border-amber-400/30 hover:shadow-lg hover:shadow-amber-500/10'
-                    : 'bg-white border-slate-200 text-indigo-600 hover:bg-slate-50 hover:border-indigo-200 hover:shadow-md hover:shadow-indigo-500/10'
+                    ? 'bg-slate-900/90 border-slate-700/80 shadow-black/40'
+                    : 'bg-indigo-50/90 border-indigo-200/80 shadow-indigo-100/50'
                 }`}
+                style={{ justifyContent: isDark ? 'flex-end' : 'flex-start' }}
               >
-                <div className="relative w-4 h-4 flex items-center justify-center">
+                {/* Background faint icons on the track */}
+                <div className="absolute inset-0 flex items-center justify-between px-2 text-[10px] pointer-events-none select-none">
                   <Sun
-                    className={`w-4 h-4 absolute transition-all duration-500 ease-in-out transform ${
-                      isDark
-                        ? 'rotate-0 scale-100 opacity-100 text-amber-400'
-                        : '-rotate-90 scale-0 opacity-0 text-amber-500'
+                    className={`w-3.5 h-3.5 transition-opacity duration-300 ${
+                      !isDark ? 'opacity-0' : 'opacity-40 text-amber-400'
                     }`}
                   />
                   <Moon
-                    className={`w-4 h-4 absolute transition-all duration-500 ease-in-out transform ${
-                      isDark
-                        ? 'rotate-90 scale-0 opacity-0 text-indigo-400'
-                        : 'rotate-0 scale-100 opacity-100 text-indigo-600'
+                    className={`w-3.5 h-3.5 transition-opacity duration-300 ${
+                      isDark ? 'opacity-0' : 'opacity-40 text-indigo-500'
                     }`}
                   />
                 </div>
-              </button>
+
+                {/* Animated sliding handle with motion layout */}
+                <motion.div
+                  layout
+                  transition={{
+                    type: 'spring',
+                    stiffness: 700,
+                    damping: 30,
+                  }}
+                  className={`w-6 h-6 rounded-full flex items-center justify-center shadow-md relative z-10 ${
+                    isDark
+                      ? 'bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white shadow-indigo-500/30'
+                      : 'bg-white text-amber-500 shadow-slate-300/80 border border-slate-200/60'
+                  }`}
+                >
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={theme}
+                      initial={{ rotate: isDark ? -90 : 90, scale: 0.4, opacity: 0 }}
+                      animate={{ rotate: 0, scale: 1, opacity: 1 }}
+                      exit={{ rotate: isDark ? 90 : -90, scale: 0.4, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex items-center justify-center"
+                    >
+                      {isDark ? (
+                        <Moon className="w-3.5 h-3.5" />
+                      ) : (
+                        <Sun className="w-3.5 h-3.5" />
+                      )}
+                    </motion.div>
+                  </AnimatePresence>
+                </motion.div>
+              </motion.button>
             )}
           </div>
         </div>
