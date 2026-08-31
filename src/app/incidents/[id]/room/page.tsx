@@ -2,6 +2,8 @@
 
 import { useState, useEffect, use, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { useTheme } from '@/components/ThemeProvider';
+import ThemeToggle from '@/components/ThemeToggle';
 import { useLiveTranscription, LiveTranscriptSegment } from '@/hooks/useLiveTranscription';
 import AudioVisualizer from '@/components/AudioVisualizer';
 
@@ -20,6 +22,7 @@ type PageProps = {
 
 export default function VoiceRoom({ params }: PageProps) {
   const { id: incidentId } = use(params);
+  const { isDark } = useTheme();
 
   // Incident states
   const [incidentTitle, setIncidentTitle] = useState('Payment API Outage');
@@ -326,33 +329,38 @@ export default function VoiceRoom({ params }: PageProps) {
   }, [leaveChannel]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-16 flex flex-col relative">
-      {/* Glow Effects */}
-      <div className="absolute top-0 right-1/4 w-[400px] h-[400px] bg-indigo-650/5 rounded-full blur-3xl pointer-events-none" />
-
+    <div className={`min-h-screen font-sans pb-16 flex flex-col relative transition-colors duration-300 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       {/* Header */}
-      <header className="border-b border-slate-900 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
+      <header className={`border-b backdrop-blur-md sticky top-0 z-50 transition-colors duration-300 ${isDark ? 'border-slate-850 bg-slate-950/75' : 'border-slate-200/80 bg-white/75 shadow-xs'}`}>
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="w-8 h-8 rounded bg-gradient-to-tr from-indigo-650 to-indigo-400 flex items-center justify-center font-bold text-lg text-white">
+            <span className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center font-bold text-lg text-white shadow-md shadow-indigo-500/25">
               🎙️
             </span>
             <div>
-              <span className="text-[10px] text-indigo-400 uppercase font-black tracking-wider block">Live Voice Bridge</span>
-              <h1 className="text-sm font-bold text-white leading-none mt-0.5">{incidentTitle}</h1>
+              <span className="text-[10px] text-indigo-500 uppercase font-black tracking-wider block">Live Voice Bridge</span>
+              <h1 className={`text-sm font-bold leading-none mt-0.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>{incidentTitle}</h1>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
-            <span className="bg-rose-950/80 text-rose-350 border border-rose-900 px-2.5 py-1 rounded text-xs font-bold">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${
+              isDark ? 'bg-rose-950/80 text-rose-350 border-rose-900' : 'bg-rose-50 text-rose-700 border-rose-200'
+            }`}>
               {severity}
             </span>
             <Link 
               href={`/incidents/${incidentId}`}
-              className="text-xs font-bold text-slate-450 hover:text-white transition-colors"
+              className={`text-xs font-bold transition-colors ${
+                isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              Back to Dashboard
+              Back to Hub
             </Link>
+
+            <div className={`h-5 w-[1px] ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+
+            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -368,18 +376,19 @@ export default function VoiceRoom({ params }: PageProps) {
         )}
 
         {!joined ? (
-          // Pre-Join Join Panel
-          <div className="p-8 rounded-2xl bg-slate-900 border border-slate-800 space-y-6 shadow-xl relative overflow-hidden">
+          <div className={`p-8 rounded-2xl border space-y-6 shadow-xl relative overflow-hidden transition-all duration-300 ${
+            isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-slate-200/50'
+          }`}>
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-600 to-indigo-400" />
             
             <div className="space-y-1">
-              <h2 className="text-xl font-black text-white">Connect Voice Bridge</h2>
-              <p className="text-xs text-slate-450">Join the live operational voice call channel to triage this outage incident.</p>
+              <h2 className={`text-xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>Connect Voice Bridge</h2>
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Join the live operational voice call channel to triage this outage incident.</p>
             </div>
 
             <form onSubmit={joinChannel} className="space-y-4">
-              <div className="space-y-1">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">Your Full Name</label>
+              <div className="space-y-1.5">
+                <label className={`block text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Your Full Name</label>
                 <input
                   type="text"
                   required
@@ -387,17 +396,25 @@ export default function VoiceRoom({ params }: PageProps) {
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
                   disabled={connecting}
-                  className="w-full px-4 py-2.5 rounded-lg bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none text-xs text-white placeholder-slate-655"
+                  className={`w-full px-4 py-2.5 rounded-xl border text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/20 ${
+                    isDark
+                      ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500 focus:border-indigo-500'
+                      : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 focus:border-indigo-600 shadow-xs'
+                  }`}
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">Your On-Call Role</label>
+              <div className="space-y-1.5">
+                <label className={`block text-[10px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Your On-Call Role</label>
                 <select
                   value={userRole}
                   onChange={(e) => setUserRole(e.target.value as any)}
                   disabled={connecting}
-                  className="w-full px-4 py-2.5 rounded-lg bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none text-xs text-white"
+                  className={`w-full px-4 py-2.5 rounded-xl border text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/20 ${
+                    isDark
+                      ? 'bg-slate-950 border-slate-800 text-white focus:border-indigo-500'
+                      : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600 shadow-xs'
+                  }`}
                 >
                   <option value="ENGINEER">ENGINEER (Triage development)</option>
                   <option value="SRE">SRE (Platform infrastructure)</option>
@@ -426,36 +443,46 @@ export default function VoiceRoom({ params }: PageProps) {
             </form>
           </div>
         ) : (
-          // Active Voice Room Panel
-          <div className="p-8 rounded-2xl bg-slate-900 border border-slate-800 space-y-6 shadow-xl relative">
-            <div className="absolute top-4 right-4 flex items-center gap-1.5 bg-slate-950 px-2 py-0.5 rounded border border-slate-850">
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                connectionStatus === 'Connected' ? 'bg-emerald-500' :
+          <div className={`p-8 rounded-2xl border space-y-6 shadow-xl relative overflow-hidden transition-all duration-300 ${
+            isDark ? 'bg-slate-900/80 border-slate-800' : 'bg-white border-slate-200 shadow-slate-200/50'
+          }`}>
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-600 to-emerald-500" />
+            
+            {/* Status indicator bar */}
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${
+                connectionStatus === 'Connected' ? 'bg-emerald-500 animate-pulse' :
                 connectionStatus === 'Connecting' || connectionStatus === 'Reconnecting' ? 'bg-amber-500 animate-ping' :
-                'bg-slate-700'
+                'bg-slate-400'
               }`} />
-              <span className="text-[9px] uppercase font-bold text-slate-500">{connectionStatus}</span>
+              <span className={`text-[10px] uppercase font-bold tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>{connectionStatus}</span>
             </div>
 
             <div className="space-y-1">
-              <h2 className="text-lg font-black text-white">Active Bridge Participants</h2>
-              <p className="text-xs text-slate-450">Triage bridge is open. All audio tracks are live-mixed.</p>
+              <h2 className={`text-lg font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>Active Bridge Participants</h2>
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Triage bridge is open. All audio tracks are live-mixed.</p>
             </div>
 
             {/* Participants list */}
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 divide-y divide-slate-850/50 space-y-2.5">
+            <div className={`p-4 rounded-xl border divide-y space-y-2.5 ${
+              isDark
+                ? 'bg-slate-950/80 border-slate-800 divide-slate-800/60'
+                : 'bg-slate-50 border-slate-200 divide-slate-200/80'
+            }`}>
               {participants.map((p) => (
                 <div key={p.uid} className="flex items-center justify-between pt-2.5 first:pt-0">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${p.isLocal ? 'bg-indigo-650' : 'bg-slate-805'}`}>
+                  <div className="flex items-center gap-2.5">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-xs ${
+                      p.isLocal ? 'bg-indigo-600' : isDark ? 'bg-slate-700' : 'bg-slate-400'
+                    }`}>
                       {p.name.charAt(0)}
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <div className={`text-xs font-bold flex items-center gap-1.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                         <span>{p.name}</span>
-                        {p.isLocal && <span className="text-[8px] bg-indigo-950 text-indigo-400 border border-indigo-900 px-1 rounded">You</span>}
+                        {p.isLocal && <span className="text-[9px] bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 px-1.5 py-0.2 rounded font-semibold">You</span>}
                       </div>
-                      <span className="text-[9px] uppercase font-black text-slate-500">{p.role}</span>
+                      <span className={`text-[9px] uppercase font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{p.role}</span>
                     </div>
                   </div>
 
@@ -463,15 +490,19 @@ export default function VoiceRoom({ params }: PageProps) {
                     <AudioVisualizer isSpeaking={p.isSpeaking} isMuted={p.isMuted} />
                     {/* Speak Indicator */}
                     {p.isSpeaking ? (
-                      <span className="text-[9px] uppercase font-bold text-emerald-450 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900/60 animate-pulse">
+                      <span className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded border animate-pulse ${
+                        isDark ? 'text-emerald-400 bg-emerald-950/40 border-emerald-800/60' : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                      }`}>
                         Speaking 🎙️
                       </span>
                     ) : p.isMuted ? (
-                      <span className="text-[9px] uppercase font-bold text-rose-350 bg-rose-950/40 px-2 py-0.5 rounded border border-rose-900/40">
+                      <span className={`text-[9px] uppercase font-bold px-2 py-0.5 rounded border ${
+                        isDark ? 'text-rose-400 bg-rose-950/40 border-rose-800/40' : 'text-rose-700 bg-rose-50 border-rose-200'
+                      }`}>
                         Muted 🔇
                       </span>
                     ) : (
-                      <span className="text-[9px] uppercase font-bold text-slate-500">
+                      <span className={`text-[9px] uppercase font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                         Silent
                       </span>
                     )}
@@ -481,18 +512,22 @@ export default function VoiceRoom({ params }: PageProps) {
             </div>
 
             {/* Live Transcript */}
-            <div className="rounded-xl border border-slate-850 bg-slate-950 overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-850 bg-slate-900/60">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">LIVE TRANSCRIPT</span>
+            <div className={`rounded-xl border overflow-hidden ${
+              isDark ? 'border-slate-800 bg-slate-950/90' : 'border-slate-200 bg-white'
+            }`}>
+              <div className={`flex items-center justify-between px-4 py-2.5 border-b ${
+                isDark ? 'border-slate-800 bg-slate-900/60' : 'border-slate-150 bg-slate-50'
+              }`}>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">LIVE TRANSCRIPT</span>
                 <span
-                  className={`text-[9px] font-bold uppercase rounded px-1.5 py-0.5 ${
+                  className={`text-[9px] font-bold uppercase rounded px-2 py-0.5 border ${
                     transcription.status.status === 'connected'
-                      ? 'bg-emerald-950 text-emerald-400'
+                      ? isDark ? 'bg-emerald-950 text-emerald-400 border-emerald-800' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                       : transcription.status.status === 'mock'
-                      ? 'bg-amber-950 text-amber-400'
+                      ? isDark ? 'bg-amber-950 text-amber-400 border-amber-800' : 'bg-amber-50 text-amber-700 border-amber-200'
                       : transcription.status.status === 'error'
-                      ? 'bg-rose-950 text-rose-400'
-                      : 'bg-slate-800 text-slate-400'
+                      ? isDark ? 'bg-rose-950 text-rose-400 border-rose-800' : 'bg-rose-50 text-rose-700 border-rose-200'
+                      : isDark ? 'bg-slate-800 text-slate-400 border-slate-700' : 'bg-slate-100 text-slate-600 border-slate-200'
                   }`}
                 >
                   {transcription.status.status}
@@ -501,21 +536,23 @@ export default function VoiceRoom({ params }: PageProps) {
 
               <div className="max-h-56 overflow-y-auto p-3 space-y-2.5">
                 {transcription.status.status === 'error' && (
-                  <div className="p-2.5 rounded bg-rose-950/30 border border-rose-900/40 text-[10px] text-rose-300 leading-relaxed">
+                  <div className={`p-2.5 rounded border text-[10px] leading-relaxed ${
+                    isDark ? 'bg-rose-950/30 border-rose-900/40 text-rose-300' : 'bg-rose-50 border-rose-200 text-rose-800'
+                  }`}>
                     ⚠️ {transcription.status.message || 'STT unavailable. Voice room continues without transcription.'}
                   </div>
                 )}
                 {transcription.segments.length === 0 && transcription.status.status === 'connected' && (
-                  <div className="text-center text-[10px] text-slate-500 py-4">
+                  <div className={`text-center text-[10px] py-4 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                     Listening… speak to see live transcription.
                   </div>
                 )}
                 {transcription.segments.length === 0 && transcription.status.status !== 'connected' && (
-                  <div className="text-center text-[10px] text-slate-600 py-4">
+                  <div className={`text-center text-[10px] py-4 ${isDark ? 'text-slate-600' : 'text-slate-400'}`}>
                     No live transcript yet.
                   </div>
                 )}
-                {transcription.segments.map((t, i) => (
+                {transcription.segments.map((t: LiveTranscriptSegment, i: number) => (
                   <LiveTranscriptBubble key={`${t.id}-${i}`} seg={t} />
                 ))}
               </div>
@@ -525,20 +562,23 @@ export default function VoiceRoom({ params }: PageProps) {
             <div className="flex gap-3 pt-2">
               <button
                 onClick={toggleMute}
-                className={`flex-1 py-3 font-bold text-xs rounded-lg border transition-all flex items-center justify-center gap-2 ${
+                className={`flex-1 py-3 font-bold text-xs rounded-xl border transition-all flex items-center justify-center gap-2 cursor-pointer ${
                   isMuted
-                    ? 'bg-rose-950/20 text-rose-450 border-rose-800 hover:bg-rose-900/30'
-                    : 'bg-slate-850 text-slate-300 border-slate-750 hover:bg-slate-800'
+                    ? isDark
+                      ? 'bg-rose-950/30 text-rose-300 border-rose-800 hover:bg-rose-900/40'
+                      : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                    : isDark
+                      ? 'bg-slate-800 hover:bg-slate-750 text-slate-200 border-slate-700'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
                 }`}
               >
                 {isMuted ? '🎙️ Unmute Mic' : '🔇 Mute Mic'}
               </button>
-
               <button
                 onClick={leaveChannel}
-                className="py-3 px-6 bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white rounded-lg shadow transition-all"
+                className="py-3 px-6 bg-rose-600 hover:bg-rose-500 active:bg-rose-700 font-bold text-xs text-white rounded-xl shadow transition-all cursor-pointer"
               >
-                Leave Bridge
+                Disconnect
               </button>
             </div>
           </div>
@@ -549,6 +589,7 @@ export default function VoiceRoom({ params }: PageProps) {
 }
 
 function LiveTranscriptBubble({ seg }: { seg: LiveTranscriptSegment }) {
+  const { isDark } = useTheme();
   const time = new Date(seg.timestamp).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -557,19 +598,23 @@ function LiveTranscriptBubble({ seg }: { seg: LiveTranscriptSegment }) {
 
   return (
     <div className="space-y-0.5">
-      <div className="flex items-center justify-between text-[9px] text-slate-500">
-        <span className="font-bold uppercase">{seg.speakerName}</span>
+      <div className={`flex items-center justify-between text-[9px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+        <span className="font-bold uppercase">{seg.speakerName || seg.speaker}</span>
         <span>{time}</span>
       </div>
       <div
         className={`p-2.5 rounded-lg text-xs leading-relaxed border ${
           seg.isFinal
-            ? 'bg-slate-900 border-slate-850 text-slate-200'
-            : 'bg-slate-900/40 border-slate-800/60 text-slate-400 italic'
+            ? isDark
+              ? 'bg-slate-900 border-slate-800 text-slate-200'
+              : 'bg-slate-100/80 border-slate-200 text-slate-800'
+            : isDark
+              ? 'bg-slate-900/40 border-slate-800/60 text-slate-400 italic'
+              : 'bg-slate-50 border-slate-200/60 text-slate-500 italic'
         }`}
       >
         {seg.text}
-        {!seg.isFinal && <span className="ml-1 text-indigo-400">▍</span>}
+        {!seg.isFinal && <span className="ml-1 text-indigo-500">▍</span>}
       </div>
     </div>
   );
