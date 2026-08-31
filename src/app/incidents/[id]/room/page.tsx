@@ -2,6 +2,8 @@
 
 import { useState, useEffect, use, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { useLiveTranscription, LiveTranscriptSegment } from '@/hooks/useLiveTranscription';
+import AudioVisualizer from '@/components/AudioVisualizer';
 
 interface ActiveParticipant {
   uid: string;
@@ -41,6 +43,20 @@ export default function VoiceRoom({ params }: PageProps) {
   // Agora references
   const agoraClientRef = useRef<any>(null);
   const localAudioTrackRef = useRef<any>(null);
+
+  // Live transcription
+  const transcription = useLiveTranscription({
+    incidentId,
+    userName,
+    userRole,
+    enabled: joined && !isMuted,
+  });
+
+  // Ref to always access latest transcription disconnect without adding it to useCallback deps
+  const transcriptionRef = useRef(transcription);
+  useEffect(() => {
+    transcriptionRef.current = transcription;
+  });
 
   // Fetch core incident details on mount
   useEffect(() => {
@@ -214,10 +230,23 @@ export default function VoiceRoom({ params }: PageProps) {
       // Publish local track to room
       await client.publish([localAudioTrack]);
 
-      // Set local user details in participant list
-      setParticipants([
-        { uid, name: userName.trim(), role: userRole, isMuted: false, isSpeaking: false, isLocal: true }
-      ]);
+      // 6. Start live transcription from the local microphone stream
+      try {
+        const mediaTrack: MediaStreamTrack = localAudioTrack.getMediaStreamTrack();
+        const stream = new MediaStream([mediaTrack]);
+        transcription.connect(stream);
+      } catch (sttErr) {
+        console.warn('[STT] Could not start live transcription:', sttErr);
+      }
+
+      // Set local user details in participant list (merge, don't overwrite remotes)
+      setParticipants((prev) => {
+        const withoutLocal = prev.filter((p) => !p.isLocal);
+        return [
+          { uid, name: userName.trim(), role: userRole, isMuted: false, isSpeaking: false, isLocal: true },
+          ...withoutLocal,
+        ];
+      });
 
       setJoined(true);
       setConnectionStatus('Connected');
@@ -254,6 +283,9 @@ export default function VoiceRoom({ params }: PageProps) {
     setConnectionStatus('Disconnected');
     setJoined(false);
     setParticipants([]);
+
+    // stop live transcription
+    transcriptionRef.current.disconnect();
 
     // 1. Notify DB persistence layer
     if (userName.trim()) {
@@ -427,7 +459,8 @@ export default function VoiceRoom({ params }: PageProps) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <AudioVisualizer isSpeaking={p.isSpeaking} isMuted={p.isMuted} />
                     {/* Speak Indicator */}
                     {p.isSpeaking ? (
                       <span className="text-[9px] uppercase font-bold text-emerald-450 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-900/60 animate-pulse">
@@ -445,6 +478,47 @@ export default function VoiceRoom({ params }: PageProps) {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Live Transcript */}
+            <div className="rounded-xl border border-slate-850 bg-slate-950 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-850 bg-slate-900/60">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400">LIVE TRANSCRIPT</span>
+                <span
+                  className={`text-[9px] font-bold uppercase rounded px-1.5 py-0.5 ${
+                    transcription.status.status === 'connected'
+                      ? 'bg-emerald-950 text-emerald-400'
+                      : transcription.status.status === 'mock'
+                      ? 'bg-amber-950 text-amber-400'
+                      : transcription.status.status === 'error'
+                      ? 'bg-rose-950 text-rose-400'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {transcription.status.status}
+                </span>
+              </div>
+
+              <div className="max-h-56 overflow-y-auto p-3 space-y-2.5">
+                {transcription.status.status === 'error' && (
+                  <div className="p-2.5 rounded bg-rose-950/30 border border-rose-900/40 text-[10px] text-rose-300 leading-relaxed">
+                    ⚠️ {transcription.status.message || 'STT unavailable. Voice room continues without transcription.'}
+                  </div>
+                )}
+                {transcription.segments.length === 0 && transcription.status.status === 'connected' && (
+                  <div className="text-center text-[10px] text-slate-500 py-4">
+                    Listening… speak to see live transcription.
+                  </div>
+                )}
+                {transcription.segments.length === 0 && transcription.status.status !== 'connected' && (
+                  <div className="text-center text-[10px] text-slate-600 py-4">
+                    No live transcript yet.
+                  </div>
+                )}
+                {transcription.segments.map((t, i) => (
+                  <LiveTranscriptBubble key={`${t.id}-${i}`} seg={t} />
+                ))}
+              </div>
             </div>
 
             {/* Action buttons panel */}
@@ -470,6 +544,33 @@ export default function VoiceRoom({ params }: PageProps) {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function LiveTranscriptBubble({ seg }: { seg: LiveTranscriptSegment }) {
+  const time = new Date(seg.timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
+  return (
+    <div className="space-y-0.5">
+      <div className="flex items-center justify-between text-[9px] text-slate-500">
+        <span className="font-bold uppercase">{seg.speakerName}</span>
+        <span>{time}</span>
+      </div>
+      <div
+        className={`p-2.5 rounded-lg text-xs leading-relaxed border ${
+          seg.isFinal
+            ? 'bg-slate-900 border-slate-850 text-slate-200'
+            : 'bg-slate-900/40 border-slate-800/60 text-slate-400 italic'
+        }`}
+      >
+        {seg.text}
+        {!seg.isFinal && <span className="ml-1 text-indigo-400">▍</span>}
+      </div>
     </div>
   );
 }
