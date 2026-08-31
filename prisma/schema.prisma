@@ -122,8 +122,14 @@ model Transcript {
   incident      Incident     @relation(fields: [incidentId], references: [id], onDelete: Cascade)
   participantId String?
   participant   Participant? @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  speakerId     String?
   speakerName   String
+  speakerRole   String?
   text          String
+  startTime     Float?
+  endTime       Float?
+  confidence    Float?       @default(1.0)
+  isFinal       Boolean      @default(true)
   timestamp     DateTime     @default(now())
   createdAt     DateTime     @default(now())
 }

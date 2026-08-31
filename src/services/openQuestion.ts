@@ -46,6 +46,10 @@ export class OpenQuestionService {
       throw new Error('Question not found');
     }
 
+    if (question.resolved) {
+      throw new Error('Question has already been resolved');
+    }
+
     const currentEvidence = question.evidence as unknown as EvidenceMetadata;
     const updatedEvidence: EvidenceMetadata = {
       ...currentEvidence,

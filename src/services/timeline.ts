@@ -25,11 +25,11 @@ export class TimelineService {
   }
 
   async getTimeline(incidentId: string) {
-    // Sort timeline chronologically by timestamp
     const events = await prisma.timelineEvent.findMany({
       where: { incidentId },
       orderBy: { timestamp: 'asc' },
     });
+    // Client-side sort as safety net for edge cases
     return events.sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );

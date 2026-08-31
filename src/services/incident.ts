@@ -3,16 +3,7 @@ import {
   IncidentState,
   IncidentStatus,
   Severity,
-  ParticipantSummary,
   ParticipantRole,
-  FactSummary,
-  HypothesisSummary,
-  DecisionSummary,
-  ActionItemSummary,
-  ConflictSummary,
-  OpenQuestionSummary,
-  TimelineEventSummary,
-  EvidenceMetadata,
 } from '@/types/incident';
 import { aiProvider } from './ai';
 import { incidentStateAggregationService } from './aggregation';
@@ -175,13 +166,32 @@ export class IncidentService {
     });
   }
 
-  async addTranscript(incidentId: string, text: string, speakerName: string, participantId?: string) {
+  async addTranscript(
+    incidentId: string,
+    text: string,
+    speakerName: string,
+    participantId?: string,
+    opts?: {
+      speakerId?: string;
+      speakerRole?: string;
+      startTime?: number;
+      endTime?: number;
+      confidence?: number;
+      isFinal?: boolean;
+    }
+  ) {
     return prisma.transcript.create({
       data: {
         incidentId,
         text,
         speakerName,
         participantId: participantId || null,
+        speakerId: opts?.speakerId || null,
+        speakerRole: opts?.speakerRole || null,
+        startTime: opts?.startTime ?? null,
+        endTime: opts?.endTime ?? null,
+        confidence: opts?.confidence ?? null,
+        isFinal: opts?.isFinal ?? true,
       },
     });
   }
