@@ -2,6 +2,8 @@
 
 import { useState, useEffect, use, useCallback } from 'react';
 import Link from 'next/link';
+import { useTheme } from '@/components/ThemeProvider';
+import ThemeToggle from '@/components/ThemeToggle';
 import {
   IncidentState,
   ParticipantSummary,
@@ -23,6 +25,7 @@ type PageProps = {
 
 export default function IncidentDashboard({ params }: PageProps) {
   const { id: incidentId } = use(params);
+  const { isDark } = useTheme();
 
   // States
   const [state, setState] = useState<IncidentState | null>(null);
@@ -422,7 +425,7 @@ export default function IncidentDashboard({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className={`min-h-screen flex items-center justify-center ${isDark ? 'bg-slate-950 text-white' : 'bg-slate-50 text-slate-900'}`}>
         <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -430,52 +433,52 @@ export default function IncidentDashboard({ params }: PageProps) {
 
   if (!state) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center gap-4">
+      <div className={`min-h-screen flex flex-col items-center justify-center gap-4 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
         <h2 className="text-2xl font-bold">Incident bridge not found.</h2>
-        <Link href="/incidents" className="text-indigo-400 hover:underline">Return to Incident Hub</Link>
+        <Link href="/incidents" className="text-indigo-500 hover:underline">Return to Incident Hub</Link>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans pb-16 relative">
+    <div className={`min-h-screen flex flex-col font-sans pb-16 relative transition-colors duration-300 ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       {/* Header Panel */}
-      <header className="border-b border-slate-900 bg-slate-900/60 backdrop-blur-md sticky top-0 z-40">
+      <header className={`border-b backdrop-blur-md sticky top-0 z-40 transition-colors duration-300 ${isDark ? 'border-slate-850 bg-slate-950/75' : 'border-slate-200/80 bg-white/80 shadow-xs'}`}>
         <div className="max-w-8xl mx-auto px-6 h-18 flex flex-col sm:flex-row sm:items-center sm:justify-between py-4 gap-4">
           <div className="flex items-center gap-4">
-            <Link href="/incidents" className="p-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-350 transition-colors">
+            <Link href="/incidents" className={`p-2 rounded text-xs font-semibold transition-colors ${isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}>
               ← Hub
             </Link>
             <div>
               <div className="flex items-center gap-3">
-                <span className="text-xs font-bold text-slate-500">INCIDENT BRIDGE</span>
-                <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                <span className={`text-xs font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>INCIDENT BRIDGE</span>
+                <span className={`text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded border ${isDark ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-indigo-50 text-indigo-700 border-indigo-200'}`}>
                   {dbMode === 'LIVE' ? 'Database Connected' : 'Simulated Sandbox'}
                 </span>
               </div>
-              <h1 className="text-2xl font-black tracking-tight text-white">{state.title}</h1>
+              <h1 className={`text-2xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>{state.title}</h1>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             {/* Status pills */}
-            <div className="flex rounded-lg overflow-hidden border border-slate-800 bg-slate-950 p-1">
+            <div className={`flex rounded-lg overflow-hidden border p-1 ${isDark ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-100'}`}>
               <button
                 onClick={() => handleUpdateStatus('ACTIVE')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
                   state.currentStatus === 'ACTIVE'
                     ? 'bg-rose-600 text-white shadow shadow-rose-500/25'
-                    : 'text-slate-400 hover:text-slate-200'
+                    : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 ACTIVE OUTAGE
               </button>
               <button
                 onClick={() => handleUpdateStatus('RESOLVED')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all cursor-pointer ${
                   state.currentStatus === 'RESOLVED'
                     ? 'bg-emerald-600 text-white shadow shadow-emerald-500/25'
-                    : 'text-slate-400 hover:text-slate-200'
+                    : isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 RESOLVED
@@ -483,9 +486,19 @@ export default function IncidentDashboard({ params }: PageProps) {
             </div>
 
             {/* Severity tag */}
-            <span className="bg-rose-950/80 text-rose-350 border border-rose-800 px-3 py-1.5 rounded-lg text-xs font-black">
+            <span className={`px-3 py-1.5 rounded-lg text-xs font-black border ${
+              state.severity === 'SEV1'
+                ? isDark ? 'bg-rose-950/80 text-rose-300 border-rose-800' : 'bg-rose-50 text-rose-700 border-rose-200'
+                : state.severity === 'SEV2'
+                ? isDark ? 'bg-orange-950/80 text-orange-300 border-orange-800' : 'bg-orange-50 text-orange-700 border-orange-200'
+                : isDark ? 'bg-amber-950/80 text-amber-300 border-amber-800' : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}>
               {state.severity}
             </span>
+
+            <div className={`h-5 w-[1px] ${isDark ? 'bg-slate-800' : 'bg-slate-200'}`} />
+
+            <ThemeToggle />
           </div>
         </div>
       </header>
