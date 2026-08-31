@@ -80,5 +80,17 @@ The following scripts are configured in `package.json`:
 - `npm run start`: Runs the production-built bundle.
 - `npm run lint`: Validates the codebase using ESLint.
 - `npm run typecheck`: Performs static TypeScript validation.
+- `npm run test`: Runs the Jest unit test suites for persistence, metrics, and post-mortem generation.
 - `npm run db:generate`: Generates local Prisma client interfaces.
 - `npm run db:seed`: Feeds mock payment failure outage details to the database.
+
+---
+
+## Architecture & Post-Mortem Features
+
+- **System Architecture**: Detailed architecture diagram and pipeline flow in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Post-Mortem Reports**: Automated Markdown and JSON post-mortem report generation via `/api/incidents/[id]/export`.
+- **Live Voice Bridge**: Real-time Agora RTC voice rooms with dynamic audio waveform visualizers and resilient sandbox simulation fallbacks.
+- **Incident Scenarios & Fixtures**: Pre-built templates for payment outages, replica lag, and TLS expiry in `src/lib/fixtures.ts`.
+- **SLA & Health Metrics**: Triage velocity score, MTTA, and risk calculation helpers in `src/lib/metrics.ts`.
+

@@ -10,19 +10,13 @@ describe('Post-Mortem & Incident Health Metrics Tests', () => {
     severity: 'SEV1',
     currentStatus: 'ACTIVE',
     createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-    commander: {
-      userId: 'user-1',
-      name: 'Rahul Sharma',
-      role: 'INCIDENT_COMMANDER',
-      joinedAt: new Date().toISOString(),
-    },
     participants: [],
-    facts: [
+    confirmedFacts: [
       {
         id: 'f-1',
-        statement: 'Payment 504 gateway timeouts spike to 45%',
-        confidence: 0.95,
+        title: 'Payment 504 gateway timeouts',
+        description: 'Timeouts spike to 45% on downstream banking partner connection',
+        status: 'CONFIRMED',
         evidence: {
           sourceType: 'MONITORING',
           timestamp: new Date().toISOString(),
@@ -30,36 +24,61 @@ describe('Post-Mortem & Incident Health Metrics Tests', () => {
           verificationStatus: 'VERIFIED',
         },
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       },
     ],
+    reportedObservations: [],
     hypotheses: [
       {
         id: 'h-1',
-        statement: 'Stripe webhook processing saturated connection pool',
-        status: 'PROPOSED',
-        confidence: 0.8,
+        title: 'Stripe webhook saturation',
+        description: 'Stripe webhook processing saturated connection pool',
+        status: 'REPORTED',
+        evidence: {
+          sourceType: 'HUMAN_SPOKEN',
+          timestamp: new Date().toISOString(),
+          confidence: 0.8,
+          verificationStatus: 'UNVERIFIED',
+        },
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       },
     ],
     decisions: [
       {
         id: 'd-1',
-        decision: 'Scale payment-service pods to 12 replicas',
-        decisionMaker: 'Rahul Sharma',
+        title: 'Scale payment-service pods to 12 replicas',
+        description: 'Auto-scale deployed to relieve pool pressure',
+        decidedBy: 'Rahul Sharma',
+        evidence: {
+          sourceType: 'MANUAL_CONFIRMATION',
+          timestamp: new Date().toISOString(),
+          confidence: 1.0,
+          verificationStatus: 'VERIFIED',
+        },
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       },
     ],
-    actionItems: [
+    actions: [
       {
         id: 'a-1',
-        task: 'Apply Helm patch for payment-service',
+        title: 'Apply Helm patch for payment-service',
+        description: 'Increase memory limit and replica count',
         assigneeName: 'Amit Kumar',
         status: 'COMPLETED',
+        evidence: {
+          sourceType: 'MANUAL_CONFIRMATION',
+          timestamp: new Date().toISOString(),
+          confidence: 1.0,
+          verificationStatus: 'VERIFIED',
+        },
         createdAt: new Date().toISOString(),
-        statusHistory: [],
+        updatedAt: new Date().toISOString(),
       },
     ],
     conflicts: [],
+    openQuestions: [],
     unresolvedRisks: [],
     timeline: [
       {
@@ -76,10 +95,7 @@ describe('Post-Mortem & Incident Health Metrics Tests', () => {
         createdAt: new Date().toISOString(),
       },
     ],
-    latestSummary: {
-      summaryText: 'Payment gateway timeout caused by high concurrency and pool saturation.',
-      createdAt: new Date().toISOString(),
-    },
+    latestSummary: 'Payment gateway timeout caused by high concurrency and pool saturation.',
   };
 
   test('should generate post-mortem report with markdown and metrics', () => {
@@ -89,7 +105,7 @@ describe('Post-Mortem & Incident Health Metrics Tests', () => {
     expect(report.title).toBe('Payment Gateway Timeout Outage');
     expect(report.severity).toBe('SEV1');
     expect(report.summaryMarkdown).toContain('# Incident Post-Mortem: Payment Gateway Timeout Outage');
-    expect(report.summaryMarkdown).toContain('Payment 504 gateway timeouts spike to 45%');
+    expect(report.summaryMarkdown).toContain('Payment 504 gateway timeouts');
     expect(report.summaryMarkdown).toContain('Scale payment-service pods to 12 replicas');
     expect(report.metrics.confirmedFactsCount).toBe(1);
     expect(report.metrics.decisionsCount).toBe(1);

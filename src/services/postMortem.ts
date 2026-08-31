@@ -22,24 +22,23 @@ export class PostMortemService {
       (Date.now() - new Date(state.createdAt).getTime()) / (1000 * 60)
     );
 
-    const verifiedFacts = state.facts
-      .filter((f) => f.evidence?.verificationStatus === 'VERIFIED')
-      .map((f, i) => `${i + 1}. **${f.statement}** *(Confidence: ${Math.round((f.confidence || 1) * 100)}%)*`)
+    const verifiedFacts = (state.confirmedFacts || [])
+      .map((f, i) => `${i + 1}. **${f.title}**: ${f.description || ''}`)
       .join('\n');
 
-    const hypothesesList = state.hypotheses
-      .map((h, i) => `${i + 1}. [${h.status}] ${h.statement} - *Status: ${h.status}*`)
+    const hypothesesList = (state.hypotheses || [])
+      .map((h, i) => `${i + 1}. [${h.status}] **${h.title}**: ${h.description || ''}`)
       .join('\n');
 
-    const decisionsList = state.decisions
-      .map((d, i) => `${i + 1}. **${d.decision}** *(by ${d.decisionMaker || 'Team Consensus'} at ${new Date(d.createdAt).toLocaleTimeString()})*`)
+    const decisionsList = (state.decisions || [])
+      .map((d, i) => `${i + 1}. **${d.title}** *(by ${d.decidedBy || 'Team Consensus'} at ${new Date(d.createdAt).toLocaleTimeString()})*`)
       .join('\n');
 
-    const actionsList = state.actionItems
-      .map((a, i) => `${i + 1}. [${a.status}] **${a.task}** - Assignee: @${a.assigneeName || 'Unassigned'}`)
+    const actionsList = (state.actions || [])
+      .map((a, i) => `${i + 1}. [${a.status}] **${a.title}** - Assignee: @${a.assigneeName || 'Unassigned'}`)
       .join('\n');
 
-    const timelineList = state.timeline
+    const timelineList = (state.timeline || [])
       .map((t) => `- **${new Date(t.eventTime).toLocaleTimeString()}** [${t.eventType}]: ${t.description}`)
       .join('\n');
 
@@ -55,7 +54,7 @@ export class PostMortemService {
 ---
 
 ## Executive Summary
-${state.latestSummary?.summaryText || state.description || 'No summary text recorded.'}
+${state.latestSummary || state.description || 'No summary text recorded.'}
 
 ---
 
@@ -102,10 +101,10 @@ ${timelineList || '_No timeline events recorded._'}
       summaryMarkdown: this.generateMarkdownReport(state),
       metrics: {
         totalDurationMinutes: durationMins,
-        confirmedFactsCount: state.facts.filter((f) => f.evidence?.verificationStatus === 'VERIFIED').length,
-        decisionsCount: state.decisions.length,
-        actionItemsCount: state.actionItems.length,
-        unresolvedRisksCount: state.unresolvedRisks.length,
+        confirmedFactsCount: (state.confirmedFacts || []).length,
+        decisionsCount: (state.decisions || []).length,
+        actionItemsCount: (state.actions || []).length,
+        unresolvedRisksCount: (state.unresolvedRisks || []).length,
       },
     };
   }
