@@ -12,6 +12,7 @@ import {
   ConflictSummary,
   OpenQuestionSummary,
   TimelineEventSummary,
+  ApprovalRequestSummary,
   EvidenceMetadata,
 } from '@/types/incident';
 
@@ -38,6 +39,9 @@ export class IncidentStateAggregationService {
         },
         conflicts: true,
         questions: true,
+        approvals: {
+          orderBy: { createdAt: 'desc' },
+        },
         timeline: {
           orderBy: { timestamp: 'asc' }, // Sort timeline chronologically, never depend on DB insertion order
         },
@@ -137,13 +141,34 @@ export class IncidentStateAggregationService {
       updatedAt: q.updatedAt.toISOString(),
     }));
 
+    const approvals: ApprovalRequestSummary[] = incident.approvals.map((a) => ({
+      id: a.id,
+      actionId: a.actionId,
+      actionTitle: a.actionTitle,
+      actionDetails: a.actionDetails,
+      requestedBy: a.requestedBy,
+      status: a.status as any,
+      approvedBy: a.approvedBy,
+      rejectedBy: a.rejectedBy,
+      approvedAt: a.approvedAt ? a.approvedAt.toISOString() : null,
+      rejectedAt: a.rejectedAt ? a.rejectedAt.toISOString() : null,
+      expiresAt: a.expiresAt ? a.expiresAt.toISOString() : null,
+      evidence: a.evidence ? (a.evidence as unknown as EvidenceMetadata) : null,
+      createdAt: a.createdAt.toISOString(),
+    }));
+
     const timeline: TimelineEventSummary[] = incident.timeline.map((t) => ({
       id: t.id,
       eventType: t.eventType,
       description: t.description,
-      eventTime: t.timestamp.toISOString(), // Standardized timestamp mapping
+      eventTime: t.timestamp.toISOString(),
       evidence: t.source as unknown as EvidenceMetadata,
       createdAt: t.createdAt.toISOString(),
+      sourceType: (t.source as any)?.sourceType || 'HUMAN_SPOKEN',
+      sourceId: (t.source as any)?.sourceId || null,
+      speaker: (t.source as any)?.speakerId || null,
+      confidence: t.confidence || 0.5,
+      relatedEntity: t.relatedEntity || null,
     }));
 
     // Split facts into confirmed and reported observations
@@ -174,6 +199,7 @@ export class IncidentStateAggregationService {
       conflicts,
       openQuestions,
       unresolvedRisks,
+      approvals,
       timeline,
       latestSummary,
     };
