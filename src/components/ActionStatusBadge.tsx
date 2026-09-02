@@ -10,15 +10,15 @@ interface ActionStatusBadgeProps {
 
 export const ActionStatusBadge: React.FC<ActionStatusBadgeProps> = ({ status }) => {
   const badgeStyles: Record<ActionStatus, string> = {
-    PENDING: 'bg-slate-900 text-slate-400 border-slate-700',
-    IN_PROGRESS: 'bg-indigo-950 text-indigo-300 border-indigo-800',
-    BLOCKED: 'bg-rose-950 text-rose-300 border-rose-800',
-    COMPLETED: 'bg-emerald-950 text-emerald-300 border-emerald-800',
-    CANCELLED: 'bg-slate-950 text-slate-600 border-slate-850 line-through',
+    PENDING: 'badge-pending',
+    IN_PROGRESS: 'bg-[#33d1ff]/15 text-[#33d1ff] border border-[#33d1ff]/30',
+    BLOCKED: 'bg-red-500/15 text-red-400 border border-red-500/30',
+    COMPLETED: 'badge-confirmed',
+    CANCELLED: 'bg-white/5 text-white/30 border border-white/10 line-through',
   };
 
   return (
-    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${badgeStyles[status] || badgeStyles.PENDING}`}>
+    <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${badgeStyles[status] || badgeStyles.PENDING}`}>
       {status.replace('_', ' ')}
     </span>
   );
