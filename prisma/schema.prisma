@@ -59,6 +59,7 @@ enum ApprovalStatus {
   PENDING
   APPROVED
   REJECTED
+  EXPIRED
 }
 
 enum IntegrationType {
@@ -99,6 +100,7 @@ model Incident {
   timeline     TimelineEvent[]
   approvals    ApprovalRequest[]
   summaries    IncidentSummary[]
+  aiUtterances AiUtterance[]
 }
 
 model Participant {
@@ -183,6 +185,13 @@ model ActionItem {
   dueAt           DateTime?
   blockedReason   String?
   completionNotes String?
+  dependencies    Json?                 // array of ActionItem IDs this depends on
+  staleAt         DateTime?             // when action was detected as stale
+  lastReminderAt  DateTime?             // last time a reminder was sent
+  reminderCount   Int                   @default(0)
+  requiresApproval Boolean             @default(false)
+  approvalId      String?
+  approval        ApprovalRequest?      @relation("ApprovalAction")
   history         ActionStatusHistory[]
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
@@ -244,6 +253,8 @@ model ApprovalRequest {
   id            String         @id @default(uuid())
   incidentId    String
   incident      Incident       @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  actionId      String?   @unique
+  action        ActionItem?    @relation("ApprovalAction", fields: [actionId], references: [id], onDelete: SetNull)
   actionTitle   String
   actionDetails String
   requestedBy   String         // e.g. "AI Incident Commander" or user name
@@ -252,6 +263,7 @@ model ApprovalRequest {
   rejectedBy    String?
   approvedAt    DateTime?
   rejectedAt    DateTime?
+  expiresAt     DateTime?
   evidence      Json?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -273,4 +285,18 @@ model IncidentSummary {
   summaryText String
   createdBy   String   // e.g. "AI" or user name
   createdAt   DateTime @default(now())
+}
+
+model AiUtterance {
+  id              String   @id @default(uuid())
+  incidentId      String
+  incident        Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  text            String   // exactly what the AI spoke
+  trigger         String   // AISpeechTrigger value
+  category        String   // ALERT | CONFIRMATION | STATUS_SUMMARY
+  audioUrl        String?  // relative path to fetch synthesized audio
+  audioFormat     String?  // mp3 / wav
+  durationSeconds Float?   // estimated spoken duration
+  ttsProvider     String?  // provider that synthesized the audio
+  createdAt       DateTime @default(now())
 }
