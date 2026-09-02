@@ -14,16 +14,26 @@
     "transcription:dev": "ts-node --project tsconfig.server.json src/server/transcription-server.ts",
     "transcription:build": "tsc --project tsconfig.server.json",
     "transcription:start": "node dist-server/server/transcription-server.js",
-    "test": "jest"
+    "test": "jest",
+    "test:state-engine": "set TTS_PROVIDER=mock&& ts-node -r tsconfig-paths/register --project tsconfig.server.json tests/incidentStateEngine.test.ts",
+    "test:uncertainty": "set TTS_PROVIDER=mock&& ts-node -r tsconfig-paths/register --project tsconfig.server.json tests/uncertainty.test.ts",
+    "test:action-tracking": "set TTS_PROVIDER=mock&& ts-node -r tsconfig-paths/register --project tsconfig.server.json tests/actionTracking.test.ts",
+    "test:timeline": "set TTS_PROVIDER=mock&& ts-node -r tsconfig-paths/register --project tsconfig.server.json tests/timeline.test.ts",
+    "test:ai-speaker": "set TTS_PROVIDER=mock&& ts-node -r tsconfig-paths/register --project tsconfig.server.json tests/aiSpeaker.test.ts",
+    "test:approval": "set TTS_PROVIDER=mock&& ts-node -r tsconfig-paths/register --project tsconfig.server.json tests/approvalWorkflow.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.4.0",
     "@types/ws": "^8.18.1",
+    "agora-agent-client-toolkit": "^1.2.0",
+    "agora-agents": "^2.7.0",
     "agora-rtc-sdk-ng": "^4.24.7",
+    "agora-rtm": "^2.3.0",
     "agora-token": "^2.0.5",
     "framer-motion": "^13.1.1",
     "lucide-react": "^1.37.0",
     "motion": "^13.1.1",
+    "msedge-tts": "^2.0.7",
     "next": "16.3.3",
     "openai": "^7.8.0",
     "prisma": "^6.4.0",
@@ -44,6 +54,7 @@
     "jest": "^30.5.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.12",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5"
   }
 }
