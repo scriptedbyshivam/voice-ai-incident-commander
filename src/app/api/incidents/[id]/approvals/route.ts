@@ -6,6 +6,9 @@ const CreateApprovalSchema = z.object({
   actionTitle: z.string().min(1, 'Action title is required'),
   actionDetails: z.string().min(1, 'Action details are required'),
   requestedBy: z.string().min(1, 'Requested by is required'),
+  actionId: z.string().uuid().optional(),
+  reason: z.string().optional(),
+  expiresAt: z.string().optional(),
   evidence: z.any().optional(),
 });
 
@@ -30,12 +33,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const body = await req.json();
     const validated = CreateApprovalSchema.parse(body);
 
+    const expiresAt = validated.expiresAt ? new Date(validated.expiresAt) : null;
     const approval = await approvalsService.createRequest(
       id,
       validated.actionTitle,
       validated.actionDetails,
       validated.requestedBy,
-      validated.evidence
+      validated.evidence,
+      { actionId: validated.actionId, reason: validated.reason, expiresAt }
     );
 
     return NextResponse.json(approval, { status: 201 });

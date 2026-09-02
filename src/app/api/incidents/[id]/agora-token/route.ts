@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { agoraService } from '@/services/agora';
+import { agoraService, AGORA_AGENT_UID } from '@/services/agora';
 
 const TokenRequestSchema = z.object({
   name: z.string().min(1, 'name is required'),
@@ -8,6 +8,9 @@ const TokenRequestSchema = z.object({
 });
 
 type RouteParams = { params: Promise<{ id: string }> };
+
+/** Stable AI participant uid — must match AI_PARTICIPANT_UID in agoraAIVoiceParticipant.ts */
+const AI_PARTICIPANT_UID = 1001;
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
@@ -23,13 +26,26 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         channelName: incidentId,
         token: '',
         uid,
+        aiToken: '',
+        agentUid: AGORA_AGENT_UID,
         mock: true,
       });
     }
 
-    const config = await agoraService.getRoomConfig(incidentId, uid);
+    // User token (combined RTC+RTM) for the string uid
+    const token = await agoraService.generateRtcRtmToken(incidentId, uid);
 
-    return NextResponse.json(config);
+    // AI participant needs its own token for its numeric uid (1001)
+    const aiToken = await agoraService.generateRtcToken(incidentId, AI_PARTICIPANT_UID, 'publisher');
+
+    return NextResponse.json({
+      appId: agoraService.appId,
+      channelName: incidentId,
+      token,
+      uid,
+      aiToken,
+      agentUid: AGORA_AGENT_UID,
+    });
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Validation failed', errors: error.issues }, { status: 400 });
