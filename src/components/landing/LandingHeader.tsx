@@ -13,8 +13,8 @@ export default function LandingHeader() {
   return (
     <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/5">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="text-2xl font-bold text-[#33d1ff] tracking-tight lowercase">
-          commander
+        <Link href="/" className="text-2xl font-black text-[#33d1ff] tracking-tight lowercase hover:opacity-80 transition-opacity">
+          agora voicebridge
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">
