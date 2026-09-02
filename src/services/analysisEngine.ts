@@ -4,6 +4,7 @@ import { incidentStateAggregationService } from './aggregation';
 import { incidentStateTransitionLayer } from './stateTransition';
 import { AnalysisResult, NormalizedExtraction } from './ai-schema';
 import { realtimeEventHub } from './eventHub';
+import { aiSpeakerService } from './aiSpeaker';
 import { AnalysisRunSummary } from '@/types/events';
 
 /**
@@ -13,7 +14,7 @@ import { AnalysisRunSummary } from '@/types/events';
  *
  *  1. receive a finalized transcript segment
  *  2. load relevant incident context (NOT the full raw transcript each time)
- *  3. call OpenAI (model = configurable, default GPT-5.6)
+ *  3. call Ollama (model = configurable, default llama3.1)
  *  4. validate the response against a strict Zod schema
  *  5. persist extracted entities via the application-level state-transition layer
  *     (the model never touches the DB directly)
@@ -109,7 +110,7 @@ export class IncidentAnalysisEngine {
         incidentId: input.incidentId,
         transcriptId,
         transcriptText,
-        model: process.env.OPENAI_MODEL || 'gpt-4o',
+        model: process.env.OLLAMA_MODEL || 'llama3.1',
         extractedCounts: {
           facts: analysis.facts.length,
           observations: analysis.observations.length,
@@ -130,6 +131,12 @@ export class IncidentAnalysisEngine {
         realtimeEventHub.emit('incident.updated', { state: freshState });
       }
       realtimeEventHub.emit('analysis.completed', { incidentId: input.incidentId, summary });
+
+      // 8. AI spoken participation — speak only when a real trigger fired.
+      //    (conflict detected, decision/action persisted, etc.)
+      aiSpeakerService
+        .evaluateAndSpeak(input.incidentId)
+        .catch((err) => console.warn('[AnalysisEngine] AI speak evaluation failed:', err.message));
 
       return { runId, incidentId: input.incidentId, ok: true, summary };
     } catch (error: any) {
