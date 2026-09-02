@@ -26,6 +26,10 @@ export interface ConnectCommanderArgs {
   token: string;
   appId: string;
   requesterUid: string;
+  /** Dedicated, collision-free RTM user id for this commander connection. */
+  rtmUid?: string;
+  /** Dedicated RTM token minted for `rtmUid`. */
+  rtmToken?: string;
   agentUid: number;
   rtcClient: any;
 }
@@ -48,6 +52,71 @@ const AGENT_STATES: Record<string, CommanderAgentPresence> = {
   speaking: 'speaking',
   silent: 'silent',
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Agora RTM 2.x singleton manager with collision prevention & safe retries.
+// ─────────────────────────────────────────────────────────────────────────────
+let rtmSingleton: { rtm: any; appId: string; uid: string; inUse: boolean } | null = null;
+
+async function acquireRtm(
+  appId: string,
+  requesterUid: string,
+  token: string,
+  opts: { rtmUid?: string; rtmToken?: string } = {}
+): Promise<any> {
+  const { default: AgoraRTM } = await import('agora-rtm');
+
+  // Always enforce a fresh, collision-free RTM UID if not provided or to avoid -10027
+  const rtmUid = opts.rtmUid || `rtm-${requesterUid}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const rtmToken = opts.rtmToken || token;
+
+  // Cleanup any lingering inactive RTM instance
+  if (rtmSingleton) {
+    try {
+      await rtmSingleton.rtm?.logout?.();
+    } catch {
+      /* best effort */
+    }
+    rtmSingleton = null;
+  }
+
+  try {
+    const rtm = new AgoraRTM.RTM(appId, rtmUid);
+    await rtm.login({ token: rtmToken });
+    rtmSingleton = { rtm, appId, uid: rtmUid, inUse: true };
+    return rtm;
+  } catch (err: any) {
+    // If -10027 (SAME_UID_LOGIN) occurs, fallback to a 100% unique random UID retry
+    if (err?.code === -10027 || err?.message?.includes('-10027') || err?.message?.includes('already in use')) {
+      const retryUid = `rtm-retry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const retryRtm = new AgoraRTM.RTM(appId, retryUid);
+      await retryRtm.login({ token: rtmToken });
+      rtmSingleton = { rtm: retryRtm, appId, uid: retryUid, inUse: true };
+      return retryRtm;
+    }
+    throw err;
+  }
+}
+
+function releaseRtm(rtm: any): void {
+  if (rtmSingleton && rtmSingleton.rtm === rtm) {
+    rtmSingleton.inUse = false;
+  }
+}
+
+async function dropRtm(rtm: any): Promise<void> {
+  if (rtmSingleton && rtmSingleton.rtm === rtm) {
+    rtmSingleton.inUse = false;
+  }
+  try {
+    await rtm?.logout?.();
+  } catch {
+    /* best effort */
+  }
+  if (rtmSingleton && rtmSingleton.rtm === rtm) {
+    rtmSingleton = null;
+  }
+}
 
 export function useCommanderAgent() {
   const [state, setState] = useState<CommanderAgentState>('idle');
@@ -84,11 +153,11 @@ export function useCommanderAgent() {
         throw new Error(inviteData.error || `Agent invite failed (${inviteRes.status})`);
       }
 
-      // 2. Boot RTM with the combined token, then subscribe the agent's channel
-      //    so transcript + state events stream down over RTM.
-      const { default: AgoraRTM } = await import('agora-rtm');
-      const rtm = new AgoraRTM.RTM(args.appId, args.requesterUid);
-      await rtm.login({ token: args.token });
+      // 2. Boot RTM with collision-free UID & retry protection
+      const rtm = await acquireRtm(args.appId, args.requesterUid, args.token, {
+        rtmUid: args.rtmUid,
+        rtmToken: args.rtmToken,
+      });
       await rtm.subscribe(args.channelName);
 
       // 3. Initialize the Agora Voice AI toolkit against the already-joined RTC client.
@@ -117,7 +186,7 @@ export function useCommanderAgent() {
             return {
               uid: String(item.uid),
               text: item.text,
-              isFinal: item.status !== 0, // TurnStatus: 0 = IN_PROGRESS
+              isFinal: item.status !== 0,
               timestamp: typeof item._time === 'number' ? item._time : Date.now(),
               isAgent: !isUser,
             };
@@ -140,8 +209,7 @@ export function useCommanderAgent() {
 
       ai.subscribeMessage(args.channelName);
 
-      // 4. Subscribe the agent's remote audio so the Commander is actually audible,
-      //    and watch RTM-style presence for the shared agent UID.
+      // 4. Subscribe the agent's remote audio
       const rtcClient = args.rtcClient;
       rtcClientRef.current = rtcClient;
       agentUidRef.current = args.agentUid;
@@ -162,7 +230,6 @@ export function useCommanderAgent() {
       rtcClient.on('user-published', onUserPublished);
       rtcClient.on('user-left', onUserLeft);
 
-      // Agent may already be on the channel after the invite round-trip.
       const alreadyJoined = (rtcClient.remoteUsers || []).some(
         (u: any) => String(u.uid) === agentUid
       );
@@ -197,7 +264,6 @@ export function useCommanderAgent() {
     runtime.disposed = true;
     setState('ending');
 
-    // Ask the cloud agent to leave (idempotent server side) — fire and forget.
     if (runtime.agentId && runtime.incidentId) {
       fetch(`/api/incidents/${runtime.incidentId}/agent/stop`, {
         method: 'POST',
@@ -217,7 +283,7 @@ export function useCommanderAgent() {
       console.warn('[CommanderAgent] ai cleanup:', err);
     }
     try {
-      await runtime.rtm?.logout?.();
+      await dropRtm(runtime.rtm);
     } catch (err) {
       console.warn('[CommanderAgent] rtm logout:', err);
     }
@@ -232,7 +298,6 @@ export function useCommanderAgent() {
     setState('idle');
   }, []);
 
-  // Tear everything down without state updates when the component unmounts.
   useEffect(() => {
     const onUnmount = () => {
       const runtime = runtimeRef.current;
@@ -246,14 +311,11 @@ export function useCommanderAgent() {
       try {
         runtime.ai?.unsubscribeMessage?.(runtime.channel);
         runtime.ai?.destroy();
-      } catch {
-        /* noop */
-      }
+      } catch {}
       try {
-        runtime.rtm?.logout?.();
-      } catch {
-        /* noop */
-      }
+        releaseRtm(runtime.rtm);
+        void runtime.rtm?.logout?.().catch(() => {});
+      } catch {}
     };
     return onUnmount;
   }, []);
