@@ -50,6 +50,9 @@ export interface AIProvider {
     actionTitle: string,
     actionDetails: string
   ): Promise<z.infer<typeof AICriticalActionSchema>>;
+
+  /** Generate a short spoken reply to an operator's prompt, grounded on incident state. */
+  replyToPrompt(prompt: string, incidentStateText: string): Promise<string>;
 }
 
 export const AI_EVIDENCE_AWARE_SYSTEM_PROMPT = `You are an evidence-aware AI Incident Commander.
@@ -356,6 +359,33 @@ export class OllamaProvider implements AIProvider {
     } catch (error) {
       console.error('Error generating final incident summary:', error);
       return { summaryText: 'Failed to generate final incident summary from AI.' };
+    }
+  }
+
+  async replyToPrompt(prompt: string, incidentStateText: string): Promise<string> {
+    if (!this.hasClient()) {
+      return `This is the AI Incident Commander. Here is my reading of the current state: ${incidentStateText}`;
+    }
+
+    try {
+      const response = await this.client!.chat.completions.create({
+        model: this.model,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are the AI Incident Commander speaking aloud to an operator over a bridge. Answer their question concisely and conversationally, using the incident state as your source of truth. Reply in 2 to 4 short sentences, spoken-style, without markdown, headers, bullet points, or JSON.',
+          },
+          {
+            role: 'user',
+            content: `Incident State:\n${incidentStateText}\n\nOperator question: ${prompt}`,
+          },
+        ],
+      });
+      return (response.choices[0].message.content || '').trim();
+    } catch (error) {
+      console.error('Error generating prompt reply:', error);
+      return 'I could not reach the language model right now. Please try again in a moment.';
     }
   }
 
