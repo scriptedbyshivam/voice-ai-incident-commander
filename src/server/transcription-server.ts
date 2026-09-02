@@ -25,13 +25,10 @@ function deepgramWsUrl(): string {
     channels: '1',
     model: 'nova-3',
     smart_format: 'true',
-    diarize: 'true',
-    punctuate: 'true',
     interim_results: 'true',
     endpointing: '300',
     utterance_end_ms: '1000',
     language: 'en',
-    keywords: 'payment API:2,PostgreSQL:2,database:2,Kubernetes:2,deployment:2,rollback:2,latency:2,error rate:2,PagerDuty:2,Jira:2,Slack:2,SEV1:2,SEV2:2,incident commander:2',
   });
   return `wss://api.deepgram.com/v1/listen?${params.toString()}`;
 }
