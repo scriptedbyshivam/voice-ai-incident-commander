@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowUpRight, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Plus } from 'lucide-react';
 
 interface AppHeaderProps {
   backHref?: string;
@@ -13,46 +13,50 @@ interface AppHeaderProps {
 
 export default function AppHeader({ backHref, backLabel, title, subtitle, actions }: AppHeaderProps) {
   return (
-    <header className="sticky top-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/5">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4 min-w-0">
-          <Link href="/" className="text-xl font-bold text-[#33d1ff] tracking-tight lowercase shrink-0">
-            commander
+    <header className="sticky top-0 z-50 bg-[#090b10]/90 backdrop-blur-xl border-b border-white/10 px-4 sm:px-8 py-3">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        {/* Left Section: Plain Text Logo & Breadcrumbs */}
+        <div className="flex items-center gap-3 min-w-0">
+          <Link href="/" className="group shrink-0">
+            <span className="text-xl sm:text-2xl font-black tracking-tight text-[#33d1ff] lowercase group-hover:opacity-80 transition-opacity">
+              agora voicebridge
+            </span>
           </Link>
 
           {backHref && (
-            <Link
-              href={backHref}
-              className="hidden sm:inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-white transition-colors shrink-0"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              {backLabel || 'Back'}
-            </Link>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-white/20 font-light">/</span>
+              <Link
+                href={backHref}
+                className="flex items-center gap-1 text-xs font-medium text-white/60 hover:text-white transition-colors shrink-0"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>{backLabel || 'Back'}</span>
+              </Link>
+            </div>
           )}
 
-          {(title || subtitle) && (
-            <div className="hidden md:block border-l border-white/10 pl-4 min-w-0">
-              {subtitle && (
-                <p className="text-[10px] uppercase tracking-widest text-white/40 truncate">{subtitle}</p>
-              )}
-              {title && (
-                <h1 className="text-sm font-semibold truncate">{title}</h1>
-              )}
+          {title && (
+            <div className="hidden md:flex items-center gap-2 min-w-0">
+              <span className="text-white/20 font-light">/</span>
+              <span className="text-xs font-bold text-white truncate max-w-xs">{title}</span>
             </div>
           )}
         </div>
 
+        {/* Right Section: Single Action Group */}
         <div className="flex items-center gap-3 shrink-0">
-          {actions}
-          <Link
-            href="/incidents/new"
-            className="hidden sm:inline-flex items-center gap-2 bg-white text-black text-sm font-semibold px-4 py-2 rounded-full hover:bg-white/90 transition-all"
-          >
-            <span className="w-4 h-4 rounded-full bg-black flex items-center justify-center">
-              <ArrowUpRight className="w-2.5 h-2.5 text-white" />
-            </span>
-            New Incident
-          </Link>
+          {actions ? (
+            actions
+          ) : (
+            <Link
+              href="/incidents/new"
+              className="inline-flex items-center gap-1.5 bg-[#33d1ff] hover:bg-[#5ce0ff] text-black text-xs font-bold px-4 py-2 rounded-full transition-all shadow-md"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Declare Incident</span>
+            </Link>
+          )}
         </div>
       </div>
     </header>
