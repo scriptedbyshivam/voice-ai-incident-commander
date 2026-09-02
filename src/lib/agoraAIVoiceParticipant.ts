@@ -4,7 +4,7 @@ export interface AIVoiceParticipantOptions {
   appId: string;
   channelName: string;
   token: string;
-  /** Reserved, stable uid/account unique to the AI within the incident channel. */
+  /** Reserved uid/account unique to the AI within the incident channel. */
   uid: number | string;
   /** Mock/sandbox mode — skip channel join, keep local-only playback. */
   sandbox?: boolean;
@@ -63,9 +63,11 @@ export async function startAIVoiceParticipant(
   let publishedTrack: any = null;
   let disposed = false;
 
-  // Try to join the real Agora channel with the AI's dedicated identity.
+  // Try to join the real Agora channel with the AI's dedicated identity. A
+  // join failure (e.g. UID_CONFLICT, network) must never block local playback,
+  // so we swallow the error here and fall back to local-only audio below.
   try {
-    if (!opts.sandbox) {
+    if (!opts.sandbox && opts.appId && opts.channelName && opts.token) {
       const agoraModule = await import('agora-rtc-sdk-ng').catch(() => null);
       if (agoraModule?.default) {
         const AgoraRTC = agoraModule.default;
@@ -78,20 +80,27 @@ export async function startAIVoiceParticipant(
       }
     }
   } catch {
-    // Sandbox fallback — local-only playback is handled below.
+    // Sandbox/local fallback — local-only playback is handled below.
     client = null;
     publishedTrack = null;
   }
 
   const playBuffer = async (arrayBuffer: ArrayBuffer) => {
-    if (disposed) return;
+    if (disposed || audioCtx.state === 'closed') return;
     if (audioCtx.state === 'suspended') await audioCtx.resume().catch(() => {});
-    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-    const source = audioCtx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(channelGain);
-    source.connect(speakerGain);
-    source.start();
+    try {
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(channelGain);
+      source.connect(speakerGain);
+      source.start();
+    } catch {
+      // The browser could not decode this payload (e.g. an unusual codec or an
+      // MP3 variant the AudioContext refuses). Fall back to the local speaker
+      // so the operator still hears the commander.
+      return Promise.reject(new Error('Audio decode failed'));
+    }
   };
 
   const tryPlayUrl = async (url: string): Promise<boolean> => {
