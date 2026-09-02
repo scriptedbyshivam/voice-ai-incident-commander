@@ -85,7 +85,7 @@ async function main() {
   console.log('Participants linked to incident');
 
   // 4. Create Initial Seed Facts
-  const _fact1 = await prisma.fact.create({
+  await prisma.fact.create({
     data: {
       incidentId: incident.id,
       title: 'Checkout Failure Spike',
@@ -103,7 +103,7 @@ async function main() {
   });
 
   // 5. Create Seed Hypotheses
-  const _hyp1 = await prisma.hypothesis.create({
+  await prisma.hypothesis.create({
     data: {
       incidentId: incident.id,
       title: 'Recent Release Regression',
