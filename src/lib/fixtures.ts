@@ -1,4 +1,4 @@
-import { IncidentState, Severity } from '@/types/incident';
+import { Severity } from '@/types/incident';
 
 export interface IncidentTemplate {
   id: string;
