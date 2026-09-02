@@ -27,14 +27,16 @@ export interface TranscriptPayload {
 export interface ApprovalPayload {
   id: string;
   incidentId: string;
+  actionId: string | null;
   actionTitle: string;
   actionDetails: string;
   requestedBy: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
   approvedBy?: string | null;
   rejectedBy?: string | null;
   approvedAt?: string | null;
   rejectedAt?: string | null;
+  expiresAt?: string | null;
 }
 
 export interface RealtimeEventMap {
