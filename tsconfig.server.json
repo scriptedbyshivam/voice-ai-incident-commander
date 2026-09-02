@@ -7,7 +7,7 @@
     "strict": true,
     "skipLibCheck": true,
     "outDir": "./dist-server",
-    "rootDir": "./src",
+    "rootDir": ".",
     "resolveJsonModule": true,
     "isolatedModules": false,
     "baseUrl": ".",
@@ -15,6 +15,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src/server/**/*.ts", "src/services/**/*.ts", "src/types/**/*.ts", "src/lib/**/*.ts"],
+  "include": ["src/server/**/*.ts", "src/services/**/*.ts", "src/types/**/*.ts", "src/lib/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules"]
 }
