@@ -9,7 +9,9 @@ import {
   buildStatusRequestIntent,
   buildPeriodicStatusIntent,
   phraseCriticalConfirmation,
+  formatStatusSummary,
 } from './aiSpeechEngine';
+import { aiProvider } from './ai';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AI Spoken Participation Service
@@ -180,6 +182,21 @@ export class AISpeakerService {
     const intent = buildStatusRequestIntent(state);
     return this.speak(incidentId, intent.text, {
       trigger: intent.trigger,
+      category: 'STATUS_SUMMARY',
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Interactive prompt reply ("Speak AI") — the AI answers an operator's
+  // question aloud, grounded on the current incident state.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  async respondToPrompt(incidentId: string, prompt: string): Promise<UtteranceSummary | null> {
+    const state = await incidentStateAggregationService.getIncidentState(incidentId);
+    const stateText = state ? formatStatusSummary(state) : `No incident state is available for incident ${incidentId}.`;
+    const reply = await aiProvider.replyToPrompt(prompt, stateText);
+    return this.speak(incidentId, reply, {
+      trigger: 'USER_REQUESTED_STATUS',
       category: 'STATUS_SUMMARY',
     });
   }
