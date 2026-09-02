@@ -1,4 +1,5 @@
-﻿const { PrismaClient } = require('@prisma/client');
+﻿// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { PrismaClient } = require('@prisma/client');
 const p = new PrismaClient();
 async function main() {
   try {
