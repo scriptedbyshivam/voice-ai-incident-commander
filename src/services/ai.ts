@@ -6,8 +6,9 @@ import {
 } from './ai-schema';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Legacy schemas (kept for existing status/summary/critical-action features —
-// they operate on whole-incident summaries, not the per-utterance extraction).
+// Ollama-compatible AI Provider
+// Uses the OpenAI SDK pointed at a local Ollama instance.
+// Ollama exposes an OpenAI-compatible /v1/chat/completions endpoint.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const AIStatusSummarySchema = z.object({
@@ -97,32 +98,26 @@ Rules for the output:
 - Leave arrays empty when nothing of that type is extracted.
 - Do not fabricate facts; report only what the transcript and evidence support.`;
 
-export class OpenAIProvider implements AIProvider {
-  private openai: OpenAI | null = null;
+export class OllamaProvider implements AIProvider {
+  private client: OpenAI | null = null;
   private model: string;
 
   constructor() {
-    const apiKey = process.env.OPENAI_API_KEY;
-    // Model is fully configurable via env. Defaults to GPT-5.6 per spec.
-    // If the configured model is unavailable to the active key, operators can
-    // fall back via OPENAI_MODEL (e.g. gpt-4o) without a code change.
-    this.model = process.env.OPENAI_MODEL || 'gpt-4o';
+    const baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1';
+    this.model = process.env.OLLAMA_MODEL || 'llama3.1';
 
-    if (apiKey && apiKey !== 'placeholder_key') {
-      this.openai = new OpenAI({ apiKey });
-    }
+    // Ollama does not require an API key, but the OpenAI SDK requires one.
+    // We pass a dummy key; Ollama ignores it.
+    this.client = new OpenAI({
+      baseURL: baseUrl,
+      apiKey: 'ollama',
+    });
   }
 
   private hasClient(): boolean {
-    return this.openai !== null;
+    return this.client !== null;
   }
 
-  /**
-   * Core extraction entrypoint. Returns a *validated* AnalysisResult.
-   * Never trusts raw model output: response is parsed and validated against
-   * AIAnalysisResultSchema. On any failure we return a safe empty result so the
-   * pipeline degrades gracefully instead of persisting malformed data.
-   */
   async analyzeTranscriptSegment(input: {
     transcript: string;
     speakerId?: string;
@@ -140,7 +135,7 @@ export class OpenAIProvider implements AIProvider {
     const userPrompt = this.buildAnalysisPrompt(input);
 
     try {
-      const response = await this.openai!.chat.completions.create({
+      const response = await this.client!.chat.completions.create({
         model: this.model,
         messages: [
           { role: 'system', content: AI_EVIDENCE_AWARE_SYSTEM_PROMPT },
@@ -151,16 +146,10 @@ export class OpenAIProvider implements AIProvider {
 
       const content = response.choices[0].message.content || '{}';
       const parsed = JSON.parse(content);
-
-      // Never trust the model blindly — schema-validate first.
       const result = AIAnalysisResultSchema.parse(parsed);
-
-      // Drop any item that failed per-item validation (defensive).
       return result;
-    } catch (error: any) {
-      // If the model responds with an unexpected shape, log and return safe
-      // empty extraction — do NOT persist unvalidated model output.
-      console.error('Error calling OpenAI analyzeTranscriptSegment:', error?.message || error);
+    } catch (error: unknown) {
+      console.error('Error calling Ollama analyzeTranscriptSegment:', error instanceof Error ? error.message : error);
       return {
         facts: [],
         observations: [],
@@ -317,7 +306,7 @@ export class OpenAIProvider implements AIProvider {
     }
 
     try {
-      const response = await this.openai!.chat.completions.create({
+      const response = await this.client!.chat.completions.create({
         model: this.model,
         messages: [
           {
@@ -349,7 +338,7 @@ export class OpenAIProvider implements AIProvider {
     }
 
     try {
-      const response = await this.openai!.chat.completions.create({
+      const response = await this.client!.chat.completions.create({
         model: this.model,
         messages: [
           {
@@ -374,32 +363,76 @@ export class OpenAIProvider implements AIProvider {
     incidentStateText: string
   ): Promise<{ questionText: string; targetParticipantRole?: string }> {
     if (!this.hasClient()) {
+      return this.getMockClarificationQuestion(incidentStateText);
+    }
+
+    const SYSTEM_PROMPT = `You are an incident clarification assistant.
+
+Your job is to identify the single most critical information gap or uncertainty in the incident state and formulate a clarification question.
+
+Rules for the question:
+- SHORT: One sentence, under 20 words.
+- SPECIFIC: Reference concrete entities (service names, metrics, timestamps).
+- ACTIONABLE: Someone can answer it right now with available tools.
+- NON-ACCUSATORY: Never blame. Use "Can someone confirm..." not "Why didn't you..."
+- ROLE-TARGETED: Suggest who should answer (ENGINEER, SRE, SUPPORT, INCIDENT_COMMANDER).
+
+Respond ONLY with JSON: { "questionText": "...", "targetParticipantRole": "ENGINEER|SRE|SUPPORT|INCIDENT_COMMANDER" }`;
+
+    try {
+      const response = await this.client!.chat.completions.create({
+        model: this.model,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: `Incident State:\n${incidentStateText}` },
+        ],
+        response_format: { type: 'json_object' },
+      });
+
+      const parsed = JSON.parse(response.choices[0].message.content || '{}');
       return {
-        questionText: 'Rahul, did you find any errors in the deployment logs for the checkout microservice?',
+        questionText: parsed.questionText || 'Could someone clarify the current status?',
+        targetParticipantRole: parsed.targetParticipantRole,
+      };
+    } catch (error) {
+      console.error('Error generating clarification question:', error);
+      return { questionText: 'Can someone confirm the current database status from monitoring?', targetParticipantRole: 'SRE' };
+    }
+  }
+
+  private getMockClarificationQuestion(
+    incidentStateText: string
+  ): { questionText: string; targetParticipantRole?: string } {
+    const lower = incidentStateText.toLowerCase();
+
+    if (lower.includes('deploy') && lower.includes('error')) {
+      return {
+        questionText: 'Can someone confirm the exact timing of the deployment relative to the first error?',
         targetParticipantRole: 'ENGINEER',
       };
     }
-
-    try {
-      const response = await this.openai!.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Identify critical uncertainties or conflicts in the incident state and formulate a specific clarification question for the team.',
-          },
-          {
-            role: 'user',
-            content: `Incident State:\n${incidentStateText}`,
-          },
-        ],
-      });
-
-      return { questionText: response.choices[0].message.content || '' };
-    } catch (error) {
-      console.error('Error generating clarification question:', error);
-      return { questionText: 'Could someone clarify if the database connections have returned to normal?' };
+    if (lower.includes('database') || lower.includes('latency')) {
+      return {
+        questionText: 'Can someone confirm the current database latency from monitoring dashboards?',
+        targetParticipantRole: 'SRE',
+      };
     }
+    if (lower.includes('conflict') || lower.includes('disagree')) {
+      return {
+        questionText: 'Can someone verify the database health with monitoring data?',
+        targetParticipantRole: 'SRE',
+      };
+    }
+    if (lower.includes('unassigned') || lower.includes('who owns')) {
+      return {
+        questionText: 'Who will take ownership of the unassigned investigation task?',
+        targetParticipantRole: 'INCIDENT_COMMANDER',
+      };
+    }
+    return {
+      questionText: 'Can someone confirm the current error rate from monitoring?',
+      targetParticipantRole: 'SRE',
+    };
   }
 
   async classifyCriticalAction(
@@ -423,7 +456,7 @@ export class OpenAIProvider implements AIProvider {
     }
 
     try {
-      const response = await this.openai!.chat.completions.create({
+      const response = await this.client!.chat.completions.create({
         model: this.model,
         messages: [
           {
@@ -447,4 +480,4 @@ export class OpenAIProvider implements AIProvider {
   }
 }
 
-export const aiProvider = new OpenAIProvider();
+export const aiProvider = new OllamaProvider();
