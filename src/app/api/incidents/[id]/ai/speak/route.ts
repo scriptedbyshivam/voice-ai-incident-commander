@@ -7,7 +7,8 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 const SpeakSchema = z.object({
   text: z.string().min(1).max(2000).optional(),
-  mode: z.enum(['speak', 'status', 'evaluate', 'critical']).optional(),
+  mode: z.enum(['speak', 'status', 'evaluate', 'critical', 'prompt']).optional(),
+  prompt: z.string().min(1).max(500).optional(),
   trigger: z.enum(ALL_TRIGGERS as [AISpeechTrigger, ...AISpeechTrigger[]]).optional(),
   actionTitle: z.string().optional(),
   actionDetails: z.string().optional(),
@@ -53,6 +54,18 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         validated.actionTitle || 'an unnamed critical action',
         validated.actionDetails || ''
       );
+      return NextResponse.json({ utterance, session: aiSpeakerService.getSession(incidentId) });
+    }
+
+    if (validated.mode === 'prompt') {
+      const prompt = validated.prompt || validated.text;
+      if (!prompt) {
+        return NextResponse.json(
+          { error: 'Provide a "prompt" to ask the AI.' },
+          { status: 400 }
+        );
+      }
+      const utterance = await aiSpeakerService.respondToPrompt(incidentId, prompt);
       return NextResponse.json({ utterance, session: aiSpeakerService.getSession(incidentId) });
     }
 
