@@ -279,6 +279,7 @@ describe('Incident State Persistence Layer Tests', () => {
       questions: [],
       timeline: [],
       summaries: [],
+      approvals: [],
     };
 
     (prisma.incident.findUnique as jest.Mock).mockResolvedValue(mockIncident);

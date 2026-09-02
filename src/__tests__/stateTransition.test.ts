@@ -23,6 +23,7 @@ jest.mock('../lib/db', () => {
       },
       actionItem: {
         create: jest.fn(),
+        update: jest.fn(),
       },
       actionStatusHistory: {
         create: jest.fn(),
@@ -32,6 +33,7 @@ jest.mock('../lib/db', () => {
       },
       conflict: {
         create: jest.fn(),
+        findUnique: jest.fn(),
       },
       timelineEvent: {
         create: jest.fn(),
@@ -67,6 +69,10 @@ describe('Incident State Transition Layer (AI cannot directly mutate DB)', () =>
     (prisma.hypothesis.create as jest.Mock).mockImplementation(({ data }) => Promise.resolve({ id: 'hyp-id', ...data }));
     (prisma.decision.create as jest.Mock).mockImplementation(({ data }) => Promise.resolve({ id: 'dec-id', ...data }));
     (prisma.actionItem.create as jest.Mock).mockImplementation(({ data }) => Promise.resolve({ id: 'act-id', ...data }));
+    (prisma.actionItem.update as jest.Mock).mockImplementation(({ where, data }) =>
+      Promise.resolve({ id: where.id, status: 'PENDING', requiresApproval: data.requiresApproval })
+    );
+    (prisma.conflict.findUnique as jest.Mock).mockResolvedValue(null);
     (prisma.actionStatusHistory.create as jest.Mock).mockResolvedValue({});
     (prisma.openQuestion.create as jest.Mock).mockImplementation(({ data }) => Promise.resolve({ id: 'q-id', ...data }));
     (prisma.conflict.create as jest.Mock).mockImplementation(({ data }) => Promise.resolve({ id: 'conf-id', ...data }));

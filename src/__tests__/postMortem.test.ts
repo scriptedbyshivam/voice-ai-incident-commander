@@ -80,6 +80,7 @@ describe('Post-Mortem & Incident Health Metrics Tests', () => {
     conflicts: [],
     openQuestions: [],
     unresolvedRisks: [],
+    approvals: [],
     timeline: [
       {
         id: 't-1',
@@ -93,6 +94,11 @@ describe('Post-Mortem & Incident Health Metrics Tests', () => {
           verificationStatus: 'VERIFIED',
         },
         createdAt: new Date().toISOString(),
+        sourceType: 'MANUAL_CONFIRMATION',
+        sourceId: null,
+        speaker: null,
+        confidence: 1.0,
+        relatedEntity: null,
       },
     ],
     latestSummary: 'Payment gateway timeout caused by high concurrency and pool saturation.',
