@@ -98,7 +98,7 @@ export default function Home() {
       {/* Announcement banner */}
       <div className="gradient-banner py-2.5 px-4 text-center">
         <p className="text-sm font-medium text-black">
-          Introducing AI Voice Incident Commander — Run outage calls with real-time AI help
+          Introducing Agora VoiceBridge — Real-time AI voice intelligence for outage bridge calls
         </p>
       </div>
 
@@ -111,15 +111,15 @@ export default function Home() {
             transition={{ duration: 0.5 }}
           >
             <span className="inline-block px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-white/60 uppercase tracking-widest mb-8">
-              Voice AI Tool
+              Real-Time Voice AI Platform
             </span>
-            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight mb-6">
-              Incident Commander
+            <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tight mb-6 bg-gradient-to-r from-white via-white to-[#33d1ff] bg-clip-text text-transparent">
+              Agora VoiceBridge
             </h1>
             <p className="text-lg sm:text-xl text-white/50 max-w-2xl mx-auto leading-relaxed">
-              The easiest way to add{' '}
-              <span className="gradient-text font-semibold">real-time voice AI</span>{' '}
-              to your outage response — live calls, smart analysis, and full audit trails.
+              The easiest way to run{' '}
+              <span className="gradient-text font-semibold">real-time AI voice bridges</span>{' '}
+              for outage triage — live calls, conflict detection, and auditable timelines.
             </p>
           </motion.div>
 
