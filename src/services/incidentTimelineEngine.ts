@@ -206,8 +206,10 @@ export class IncidentTimelineEngine {
     });
 
     // Sort as safety net
+    const dir = order === 'latest' ? -1 : 1;
     const sorted = events.sort(
-      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      (a, b) =>
+        (new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()) * dir
     );
 
     // Client-side sourceType filter
