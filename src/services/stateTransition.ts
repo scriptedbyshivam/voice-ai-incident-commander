@@ -8,6 +8,7 @@ import { actionsService } from './actions';
 import { openQuestionService } from './openQuestion';
 import { conflictService } from './conflict';
 import { timelineService } from './timeline';
+import { aiSpeakerService } from './aiSpeaker';
 
 /**
  * Application-level state-transition layer.
@@ -191,10 +192,11 @@ export class IncidentStateTransitionLayer {
     title: string,
     details: string
   ): Promise<void> {
-    // Never execute; only surface for human approval.
+    // Never execute; only surface for explicit human approval.
     await prisma.approvalRequest.create({
       data: {
         incidentId,
+        actionId,
         actionTitle: title,
         actionDetails: details,
         requestedBy: 'AI Incident Commander (Recommendation)',
@@ -207,6 +209,13 @@ export class IncidentStateTransitionLayer {
           verificationStatus: 'UNVERIFIED',
         } as any,
       },
+    });
+
+    // Mark the linked action as requiring approval so its status machine is
+    // gated until a human grants permission.
+    await prisma.actionItem.update({
+      where: { id: actionId },
+      data: { requiresApproval: true },
     });
 
     await timelineService.addEvent(
@@ -224,6 +233,11 @@ export class IncidentStateTransitionLayer {
       1.0,
       new Date()
     );
+
+    // AI spoken participation — a critical action now requires human approval.
+    aiSpeakerService
+      .notifyCriticalAction(incidentId, title, details)
+      .catch((err) => console.warn('[StateTransition] AI critical-action speech failed:', err.message));
   }
 
   private async applyQuestion(incidentId: string, item: NormalizedExtraction): Promise<EntityWriteResult> {
