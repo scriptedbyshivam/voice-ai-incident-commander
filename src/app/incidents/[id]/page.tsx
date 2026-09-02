@@ -161,11 +161,10 @@ export default function IncidentDashboard({ params }: PageProps) {
                 <button
                   key={s}
                   onClick={() => handleUpdateStatus(s)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    state.currentStatus === s
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${state.currentStatus === s
                       ? s === 'ACTIVE' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'
                       : 'text-white/50 hover:text-white'
-                  }`}
+                    }`}
                 >
                   {s === 'ACTIVE' ? 'Active' : 'Resolved'}
                 </button>
