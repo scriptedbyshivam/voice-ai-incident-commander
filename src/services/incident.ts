@@ -7,6 +7,7 @@ import {
 } from '@/types/incident';
 import { aiProvider } from './ai';
 import { incidentStateAggregationService } from './aggregation';
+import { aiSpeakerService } from './aiSpeaker';
 
 export class IncidentService {
   async createIncident(
@@ -122,6 +123,9 @@ export class IncidentService {
       },
     });
 
+    // AI spoken participation — the commander begins its cadence updates.
+    aiSpeakerService.startPeriodicStatus(incident.id);
+
     return incident;
   }
 
@@ -132,10 +136,24 @@ export class IncidentService {
   }
 
   async updateIncident(id: string, data: { status?: IncidentStatus; severity?: Severity; title?: string; description?: string }) {
-    return prisma.incident.update({
+    const updated = await prisma.incident.update({
       where: { id },
       data,
     });
+
+    // Keep the AI's cadence status updates alive for ACTIVE incidents only.
+    if (updated.status === 'RESOLVED' || updated.status === 'CLOSED') {
+      aiSpeakerService.stopPeriodicStatus(updated.id);
+    } else if (updated.status === 'ACTIVE') {
+      aiSpeakerService.startPeriodicStatus(updated.id);
+    }
+
+    // AI spoken participation — significant state change (status/severity).
+    aiSpeakerService
+      .evaluateAndSpeak(updated.id)
+      .catch((err) => console.warn('[IncidentService] AI speak evaluation failed:', err.message));
+
+    return updated;
   }
 
   async getIncident(id: string): Promise<IncidentState | null> {
