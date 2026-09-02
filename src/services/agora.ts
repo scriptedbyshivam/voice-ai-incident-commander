@@ -125,6 +125,28 @@ export class AgoraService {
       agentUid: AGORA_AGENT_UID,
     };
   }
+
+  /**
+   * Generates a dedicated RTM token for an arbitrary RTM user id. Used to give
+   * the Commander a fresh, unique RTM identity per connection so a stale
+   * server-side RTM session for a reused uid never surfaces as -10027
+   * (RTM_ERROR_DUPLICATE_USER_ID).
+   */
+  async generateRtmToken(channelName: string, uid: string | number): Promise<string> {
+    if (!this.appCertificate) {
+      return `mock_rtm_token_${channelName}_${uid}_${Date.now() + 3600 * 1000}`;
+    }
+    const expirationTimeInSeconds = 3600; // Token valid for 1 hour
+    return RtcTokenBuilder.buildTokenWithRtm(
+      this.appId,
+      this.appCertificate,
+      channelName,
+      String(uid),
+      RtcRole.PUBLISHER,
+      expirationTimeInSeconds,
+      expirationTimeInSeconds
+    );
+  }
 }
 
 export const agoraService = new AgoraService();
