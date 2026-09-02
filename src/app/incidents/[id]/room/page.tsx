@@ -2,11 +2,14 @@
 
 import { useState, useEffect, use, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { useTheme } from '@/components/ThemeProvider';
-import ThemeToggle from '@/components/ThemeToggle';
 import { useLiveTranscription, LiveTranscriptSegment } from '@/hooks/useLiveTranscription';
+import { useAISpeaker } from '@/hooks/useAISpeaker';
+import { useCommanderAgent } from '@/hooks/useCommanderAgent';
+import { startAIVoiceParticipant, AI_PARTICIPANT_UID, AI_PARTICIPANT_NAME, AIVoiceParticipantHandle } from '@/lib/agoraAIVoiceParticipant';
+import { AiUtteranceSummary } from '@/types/incident';
 import AudioVisualizer from '@/components/AudioVisualizer';
-import { Radio, ArrowLeft, Volume2, Mic, MicOff, PhoneOff, AlertTriangle } from 'lucide-react';
+import AppHeader from '@/components/landing/AppHeader';
+import { Radio, Mic, MicOff, PhoneOff, AlertTriangle, ShieldAlert } from 'lucide-react';
 
 interface ActiveParticipant {
   uid: string;
@@ -17,70 +20,132 @@ interface ActiveParticipant {
   isLocal: boolean;
 }
 
-type PageProps = {
-  params: Promise<{ id: string }>;
-};
+type PageProps = { params: Promise<{ id: string }> };
 
 export default function VoiceRoom({ params }: PageProps) {
   const { id: incidentId } = use(params);
-  const { isDark } = useTheme();
 
-  // Incident states
-  const [incidentTitle, setIncidentTitle] = useState('Payment Gateway API Outage');
-  const [severity, setSeverity] = useState('SEV1');
+  const [incidentTitle, setIncidentTitle] = useState('Loading...');
+  const [severity, setSeverity] = useState('SEV');
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
 
-  // Connection & audio state
+  useEffect(() => {
+    fetch(`/api/incidents/${incidentId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data) {
+          setIncidentTitle(data.title || 'Unknown Incident');
+          setSeverity(data.severity || 'SEV3');
+          setPendingApprovalCount(
+            Array.isArray(data.approvals) ? data.approvals.filter((a: { status: string }) => a.status === 'PENDING').length : 0
+          );
+        }
+      })
+      .catch(() => {});
+  }, [incidentId]);
+
   const [joined, setJoined] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'Disconnected' | 'Connecting' | 'Connected' | 'Reconnecting'>('Disconnected');
   const [isMuted, setIsMuted] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // Identity selection states
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState<'ENGINEER' | 'SRE' | 'SUPPORT' | 'PRODUCT' | 'BUSINESS' | 'OBSERVER' | 'INCIDENT_COMMANDER'>('ENGINEER');
-
-  // Participants list
   const [participants, setParticipants] = useState<ActiveParticipant[]>([]);
 
-  // Agora references
-  const agoraClientRef = useRef<any>(null);
-  const localAudioTrackRef = useRef<any>(null);
+  const agoraClientRef = useRef<{ leave: () => Promise<void> } | null>(null);
+  const localAudioTrackRef = useRef<{ close: () => void; setEnabled: (v: boolean) => void } | null>(null);
+  const aiVoiceRef = useRef<AIVoiceParticipantHandle | null>(null);
 
-  // Live Transcription Hook
-  const transcription = useLiveTranscription({
+  const aiParticipant = useAISpeaker({
     incidentId,
-    userName: userName || 'Operator',
-    userRole,
     enabled: joined,
+    onUtterance: (u: AiUtteranceSummary) => {
+      if (aiVoiceRef.current) {
+        aiVoiceRef.current.speak({ text: u.text, audioUrl: u.audioUrl }).catch(() => {});
+      }
+    },
   });
+
+  const transcription = useLiveTranscription({ incidentId, userName: userName || 'Operator', userRole, enabled: joined });
+  const commander = useCommanderAgent();
+  const tokenDataRef = useRef<{ mock?: boolean; appId?: string; channelName?: string; token?: string; aiToken?: string; uid?: number; agentUid?: number } | null>(null);
+  const [bridgeIsMock, setBridgeIsMock] = useState<boolean | null>(null);
+  const [bridgeAgentUid, setBridgeAgentUid] = useState<number>(123456);
+
+  const handleToggleCommander = useCallback(async () => {
+    const td = tokenDataRef.current;
+    if (!td || td.mock || !agoraClientRef.current) return;
+    if (commander.state === 'running' || commander.state === 'connecting') {
+      await commander.disconnectAgent();
+      return;
+    }
+    if (commander.state === 'ending') return;
+    try {
+      await commander.connectAgent({
+        incidentId,
+        channelName: td.channelName!,
+        token: td.token!,
+        appId: td.appId!,
+        requesterUid: td.uid!,
+        agentUid: typeof td.agentUid === 'number' ? td.agentUid : 123456,
+        rtcClient: agoraClientRef.current,
+      });
+    } catch (err) {
+      console.warn('[CommanderAgent] toggle failed:', err);
+    }
+  }, [commander, incidentId]);
+
+  const aiSegments: LiveTranscriptSegment[] = aiParticipant.utterances.map((u) => ({
+    id: `ai-${u.id}`, speaker: AI_PARTICIPANT_NAME, speakerName: AI_PARTICIPANT_NAME,
+    role: 'INCIDENT_COMMANDER', text: u.text, timestamp: u.createdAt, isFinal: true,
+  }));
+
+  const agentSegments: LiveTranscriptSegment[] = commander.entries.map((e) => ({
+    id: `agent-${e.timestamp}-${e.uid}-${e.isFinal ? 'f' : 'p'}`,
+    speaker: e.isAgent ? AI_PARTICIPANT_NAME : userName || 'Operator',
+    speakerName: e.isAgent ? AI_PARTICIPANT_NAME : userName || 'Operator',
+    role: e.isAgent ? 'INCIDENT_COMMANDER' : userRole,
+    text: e.text, timestamp: new Date(e.timestamp).toISOString(), isFinal: e.isFinal,
+  }));
+
+  const crtSegments: LiveTranscriptSegment[] = [...aiSegments, ...agentSegments, ...transcription.segments].slice(0, 40);
+
+  const startAIVoice = async (tokenData: { mock?: boolean; appId?: string; channelName?: string; token?: string; aiToken?: string }) => {
+    if (aiVoiceRef.current) return;
+    const sandbox = !!tokenData.mock || !tokenData.appId || !tokenData.channelName;
+    aiVoiceRef.current = await startAIVoiceParticipant({
+      appId: tokenData.appId || '', channelName: tokenData.channelName || '',
+      token: tokenData.aiToken || tokenData.token || '', uid: AI_PARTICIPANT_UID, sandbox,
+    });
+  };
 
   const joinChannel = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userName.trim()) return;
-
     setConnecting(true);
     setErrorMsg(null);
     setConnectionStatus('Connecting');
 
     try {
-      // Simulate Agora client connection or live bridge
-      const agoraModule = await import('agora-rtc-sdk-ng').catch(() => null);
-      if (agoraModule) {
-        const AgoraRTC = agoraModule.default;
-        const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
-        agoraClientRef.current = client;
+      const tokenRes = await fetch(`/api/incidents/${incidentId}/agora-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: userName, role: userRole }),
+      }).catch(() => null);
 
-        // Try getting token or use fallback simulated mode
-        const tokenRes = await fetch(`/api/incidents/${incidentId}/agora-token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: userName, role: userRole }),
-        }).catch(() => null);
+      const tokenData = tokenRes && tokenRes.ok ? await tokenRes.json() : { mock: true };
+      tokenDataRef.current = tokenData;
+      setBridgeIsMock(!!tokenData.mock);
+      if (typeof tokenData.agentUid === 'number') setBridgeAgentUid(tokenData.agentUid);
 
-        if (tokenRes && tokenRes.ok) {
-          const { appId, channelName, token, uid } = await tokenRes.json();
-          await client.join(appId, channelName, token, uid);
+      if (!tokenData.mock && tokenData.appId) {
+        const agoraModule = await import('agora-rtc-sdk-ng').catch(() => null);
+        if (agoraModule) {
+          const AgoraRTC = agoraModule.default;
+          const client = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+          agoraClientRef.current = client;
+          await client.join(tokenData.appId, tokenData.channelName, tokenData.token, tokenData.uid);
           const micTrack = await AgoraRTC.createMicrophoneAudioTrack();
           localAudioTrackRef.current = micTrack;
           await client.publish([micTrack]);
@@ -89,17 +154,19 @@ export default function VoiceRoom({ params }: PageProps) {
 
       setParticipants([
         { uid: 'local', name: userName, role: userRole, isMuted: false, isSpeaking: false, isLocal: true },
+        { uid: String(AI_PARTICIPANT_UID), name: AI_PARTICIPANT_NAME, role: 'INCIDENT_COMMANDER', isMuted: false, isSpeaking: false, isLocal: false },
         { uid: 'p-1', name: 'Rahul Sharma', role: 'ENGINEER', isMuted: false, isSpeaking: true, isLocal: false },
         { uid: 'p-2', name: 'Priya Patel', role: 'SUPPORT', isMuted: false, isSpeaking: false, isLocal: false },
       ]);
 
+      startAIVoice(tokenData).catch((err) => console.warn('[AIVoice] Failed:', err));
       setJoined(true);
       setConnectionStatus('Connected');
-    } catch (err: any) {
-      console.warn('Live Agora hardware connect fallback:', err);
-      // Connected in simulated intercom sandbox mode
+    } catch (err) {
+      console.warn('Live Agora fallback:', err);
       setParticipants([
         { uid: 'local', name: userName, role: userRole, isMuted: false, isSpeaking: false, isLocal: true },
+        { uid: String(AI_PARTICIPANT_UID), name: AI_PARTICIPANT_NAME, role: 'INCIDENT_COMMANDER', isMuted: false, isSpeaking: false, isLocal: false },
         { uid: 'p-1', name: 'Rahul Sharma', role: 'ENGINEER', isMuted: false, isSpeaking: true, isLocal: false },
         { uid: 'p-2', name: 'Priya Patel', role: 'SUPPORT', isMuted: false, isSpeaking: false, isLocal: false },
       ]);
@@ -112,273 +179,196 @@ export default function VoiceRoom({ params }: PageProps) {
 
   const leaveChannel = useCallback(async () => {
     try {
-      if (localAudioTrackRef.current) {
-        localAudioTrackRef.current.close();
-      }
-      if (agoraClientRef.current) {
-        await agoraClientRef.current.leave();
-      }
-    } catch (err) {
-      console.error(err);
-    }
+      await commander.disconnectAgent().catch(() => {});
+      if (aiVoiceRef.current) { await aiVoiceRef.current.dispose(); aiVoiceRef.current = null; }
+      if (localAudioTrackRef.current) localAudioTrackRef.current.close();
+      if (agoraClientRef.current) await agoraClientRef.current.leave();
+    } catch (err) { console.error(err); }
     setJoined(false);
     setConnectionStatus('Disconnected');
-  }, []);
+  }, [commander]);
 
   const toggleMute = () => {
-    if (localAudioTrackRef.current) {
-      localAudioTrackRef.current.setEnabled(isMuted);
-    }
+    if (localAudioTrackRef.current) localAudioTrackRef.current.setEnabled(isMuted);
     setIsMuted(!isMuted);
   };
 
-  const inputClasses = `w-full px-4 py-3 rounded-xl input-data-slot text-xs font-mono transition-all ${
-    isDark ? 'bg-[#0e1017] text-white placeholder-slate-600' : 'bg-[#d1d9e6] text-[#2d3436] placeholder-slate-500'
-  }`;
-
   return (
-    <div
-      className={`min-h-screen font-sans pb-16 flex flex-col relative transition-colors duration-300 ${
-        isDark ? 'bg-[#141720] text-[#f1f5f9]' : 'bg-[#e0e5ec] text-[#2d3436]'
-      }`}
-    >
-      {/* Industrial Machine Header */}
-      <header className="sticky top-0 z-40 px-6 py-4">
-        <div
-          className={`max-w-7xl mx-auto px-6 h-16 rounded-2xl flex items-center justify-between border transition-all duration-300 shadow-industrial-card ${
-            isDark ? 'bg-[#1b202c]/90 border-[#232a3a]' : 'bg-[#f0f2f5]/90 border-white/60'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#ff4757] text-white flex items-center justify-center font-bold shadow-industrial-accent">
-              <Radio className="w-5 h-5 animate-pulse" />
-            </div>
-            <div>
-              <span className="text-[9px] font-mono text-[#ff4757] uppercase font-extrabold tracking-widest block leading-none">
-                VOICE INTERCOM BRIDGE // DSP-40
-              </span>
-              <h1 className="text-sm font-bold font-sans tracking-tight leading-none mt-1">
-                {incidentTitle}
-              </h1>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3 sm:gap-4">
-            <span className="px-3 py-1 rounded-xl text-xs font-mono font-black uppercase bg-[#ff4757] text-white shadow-industrial-accent">
-              {severity}
-            </span>
-            <Link 
-              href={`/incidents/${incidentId}`}
-              className="text-xs font-mono font-bold uppercase tracking-wider px-3 py-2 rounded-xl transition-colors hover:text-[#ff4757] flex items-center gap-1"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Hub</span>
-            </Link>
+    <div className="app-page font-sans flex flex-col">
+      <AppHeader
+        backHref={`/incidents/${incidentId}`}
+        backLabel="Incident"
+        title={incidentTitle}
+        subtitle={`Voice room · ${severity}`}
+      />
 
-            <div className="h-6 w-1 rounded-full bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed" />
-
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-
-      {/* Main Intercom Deck */}
       <main className="flex-1 max-w-xl mx-auto w-full px-6 py-8 flex flex-col justify-center">
-        
         {errorMsg && (
-          <div className="mb-6 p-4 rounded-2xl bg-rose-950/30 border border-rose-800/50 text-rose-300 text-xs font-mono flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-            <div>{errorMsg}</div>
+          <div className="app-alert app-alert-error mb-6">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            {errorMsg}
           </div>
         )}
 
-        {!joined ? (
-          /* PRE-JOIN INTERCOM HARDWARE PANEL */
-          <div
-            className={`p-8 rounded-3xl border space-y-6 shadow-industrial-floating relative overflow-hidden transition-all duration-300 corner-screws ${
-              isDark ? 'bg-[#1b202c] border-[#232a3a]' : 'bg-[#f0f2f5] border-white'
-            }`}
+        {pendingApprovalCount > 0 && (
+          <Link
+            href={`/incidents/${incidentId}`}
+            className="app-alert app-alert-error mb-6 hover:opacity-90 transition-opacity"
           >
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed text-[10px] font-mono font-bold text-slate-700 dark:text-slate-300 mb-1">
-                <span>CHANNEL ACCESS // 48kHz PCM</span>
-              </div>
-              <h2 className="text-2xl font-extrabold font-sans tracking-tight embossed-text">
-                Connect Voice Bridge
-              </h2>
-              <p className="text-xs text-[#4a5568] dark:text-[#94a3b8] font-medium">
-                Join the live operational voice call channel to triage this outage incident.
+            <ShieldAlert className="w-5 h-5 shrink-0" />
+            <div>
+              <p className="font-semibold text-sm">{pendingApprovalCount} action{pendingApprovalCount > 1 ? 's' : ''} waiting for approval</p>
+              <p className="text-xs opacity-70 mt-0.5">Go to the incident page to review.</p>
+            </div>
+          </Link>
+        )}
+
+        {!joined ? (
+          <div className="landing-card p-8 space-y-6">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Join the call</p>
+              <h2 className="text-2xl font-bold">Connect to voice bridge</h2>
+              <p className="text-sm text-white/50 mt-2">
+                Enter your name and role to join the live incident call.
               </p>
             </div>
 
             <form onSubmit={joinChannel} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#4a5568] dark:text-[#94a3b8]">
-                  Your Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Amit Kumar"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  disabled={connecting}
-                  className={inputClasses}
-                />
+              <div>
+                <label className="app-label">Your name *</label>
+                <input type="text" required placeholder="e.g. Amit Kumar" value={userName}
+                  onChange={(e) => setUserName(e.target.value)} disabled={connecting} className="app-input" />
               </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-[10px] font-mono font-bold uppercase tracking-wider text-[#4a5568] dark:text-[#94a3b8]">
-                  Your On-Call Role
-                </label>
-                <select
-                  value={userRole}
-                  onChange={(e) => setUserRole(e.target.value as any)}
-                  disabled={connecting}
-                  className={inputClasses}
-                >
-                  <option value="ENGINEER">ENGINEER (Triage development)</option>
-                  <option value="SRE">SRE (Platform infrastructure)</option>
-                  <option value="SUPPORT">SUPPORT (Customer backlog queues)</option>
-                  <option value="PRODUCT">PRODUCT (Scope alignment)</option>
-                  <option value="BUSINESS">BUSINESS (Revenue impact)</option>
-                  <option value="INCIDENT_COMMANDER">INCIDENT COMMANDER (Decisions &amp; approvals)</option>
-                  <option value="OBSERVER">OBSERVER (Passive listener)</option>
+              <div>
+                <label className="app-label">Your role</label>
+                <select value={userRole} onChange={(e) => setUserRole(e.target.value as typeof userRole)}
+                  disabled={connecting} className="app-input">
+                  <option value="ENGINEER">Engineer</option>
+                  <option value="SRE">SRE</option>
+                  <option value="SUPPORT">Support</option>
+                  <option value="PRODUCT">Product</option>
+                  <option value="BUSINESS">Business</option>
+                  <option value="INCIDENT_COMMANDER">Incident Commander</option>
+                  <option value="OBSERVER">Observer</option>
                 </select>
               </div>
-
-              <button
-                type="submit"
-                disabled={connecting}
-                className="w-full py-4 px-6 btn-mechanical-primary rounded-2xl font-mono font-extrabold text-sm uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-industrial-accent"
-              >
+              <button type="submit" disabled={connecting} className="w-full btn-landing-primary justify-center py-3.5 disabled:opacity-50">
                 {connecting ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>REQUESTING DSP TOKEN...</span>
+                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    Connecting...
                   </>
                 ) : (
                   <>
                     <Mic className="w-4 h-4" />
-                    <span>CONNECT MICROPHONE</span>
+                    Join call
                   </>
                 )}
               </button>
             </form>
           </div>
         ) : (
-          /* ACTIVE VOICE BRIDGE CALL PANEL */
-          <div
-            className={`p-8 rounded-3xl border space-y-6 shadow-industrial-floating relative overflow-hidden transition-all duration-300 corner-screws ${
-              isDark ? 'bg-[#1b202c] border-[#232a3a]' : 'bg-[#f0f2f5] border-white'
-            }`}
-          >
-            {/* Status indicator bar */}
+          <div className="landing-card p-6 sm:p-8 space-y-6">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed">
-                <span className={`w-2 h-2 rounded-full ${
-                  connectionStatus === 'Connected' ? 'bg-emerald-500 led-glow-green animate-pulse' : 'bg-amber-500 animate-ping'
-                }`} />
-                <span className="text-[10px] font-mono font-bold tracking-wider text-slate-700 dark:text-slate-300 uppercase">
-                  {connectionStatus}
-                </span>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${connectionStatus === 'Connected' ? 'bg-green-400 animate-pulse' : 'bg-yellow-400'}`} />
+                <span className="text-sm text-white/60">{connectionStatus}</span>
               </div>
-
-              <div className="text-[10px] font-mono text-[#ff4757] font-extrabold uppercase">
-                AGORA DSP LIVE
-              </div>
+              <span className="text-xs text-[#33d1ff] font-medium">Live</span>
             </div>
 
-            <div className="space-y-1">
-              <h2 className="text-xl font-extrabold font-sans tracking-tight embossed-text">
-                Active Bridge Intercom
-              </h2>
-              <p className="text-xs text-[#4a5568] dark:text-[#94a3b8] font-medium">
-                Triage bridge is open. All speaker tracks are live-mixed with synchronized speech extraction.
-              </p>
-            </div>
-
-            {/* Participants list */}
-            <div className="p-4 rounded-2xl bg-[#d1d9e6]/40 dark:bg-[#0e1017]/50 shadow-industrial-recessed divide-y divide-black/5 dark:divide-white/5 space-y-2.5">
-              {participants.map((p) => (
-                <div key={p.uid} className="flex items-center justify-between pt-2.5 first:pt-0">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-mono font-bold text-white shadow-industrial-accent ${
-                      p.isLocal ? 'bg-[#ff4757]' : 'bg-slate-700'
-                    }`}>
-                      {p.name.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold font-sans flex items-center gap-1.5">
-                        <span>{p.name}</span>
-                        {p.isLocal && (
-                          <span className="text-[8px] font-mono bg-[#ff4757]/20 text-[#ff4757] border border-[#ff4757]/40 px-1 rounded font-bold uppercase">
-                            YOU
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-[9px] font-mono uppercase font-bold text-slate-500">{p.role}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2.5">
-                    <AudioVisualizer isSpeaking={p.isSpeaking} isMuted={p.isMuted} />
-                    {p.isSpeaking ? (
-                      <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/60 animate-pulse">
-                        SPEAKING 🎙️
-                      </span>
-                    ) : p.isMuted ? (
-                      <span className="text-[9px] font-mono font-bold text-rose-400 bg-rose-950/60 px-2 py-0.5 rounded border border-rose-800/60">
-                        MUTED 🔇
-                      </span>
-                    ) : (
-                      <span className="text-[9px] font-mono font-bold text-slate-500">
-                        IDLE
-                      </span>
-                    )}
-                  </div>
+            {/* AI Commander control */}
+            <div className="p-4 rounded-xl bg-white/5 border border-[#33d1ff]/20 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-[#33d1ff]">AI Commander</p>
+                  <p className="text-xs text-white/40 mt-0.5">
+                    {bridgeIsMock ? 'Demo mode' :
+                      commander.state === 'running' ? (commander.agentOnline ? commander.presence : 'Joining...') : 'Standby'}
+                  </p>
                 </div>
-              ))}
+                <button
+                  onClick={handleToggleCommander}
+                  disabled={bridgeIsMock || commander.state === 'ending'}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-colors disabled:opacity-40 ${
+                    commander.state === 'running'
+                      ? 'border-red-500/50 text-red-400 hover:bg-red-500/10'
+                      : 'border-[#33d1ff]/50 text-[#33d1ff] hover:bg-[#33d1ff]/10'
+                  }`}
+                >
+                  {commander.state === 'connecting' ? 'Joining...' :
+                    commander.state === 'running' ? 'Disconnect AI' : 'Connect AI'}
+                </button>
+              </div>
+              {commander.error && <p className="text-xs text-red-400">⚠ {commander.error}</p>}
+              {commander.state === 'running' && !commander.error && (
+                <p className="text-xs text-white/40">Agent joined on UID {bridgeAgentUid}. Speak to get AI replies.</p>
+              )}
             </div>
 
-            {/* CRT Screen Live Transcription Monitor */}
-            <div className="rounded-2xl crt-screen p-4 border border-emerald-950/60 shadow-industrial-recessed space-y-2.5">
-              <div className="flex items-center justify-between border-b border-emerald-900/60 pb-2">
-                <span className="text-[10px] font-mono font-extrabold uppercase tracking-wider text-emerald-400">
-                  CRT MONITOR // LIVE TRANSCRIPTION
-                </span>
-                <span className="text-[9px] font-mono font-bold uppercase rounded px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800">
-                  {transcription.status.status}
-                </span>
-              </div>
-
-              <div className="max-h-48 overflow-y-auto space-y-2 pr-1 font-mono text-xs text-emerald-300">
-                {transcription.segments.length === 0 && (
-                  <div className="text-center text-[10px] text-emerald-700 py-4 font-mono">
-                    LISTENING ON LIVE MICROPHONE BUS...
+            {/* Participants */}
+            <div className="space-y-2">
+              <p className="app-section-title">In the call</p>
+              {participants.map((p) => {
+                const isAi = p.uid === String(AI_PARTICIPANT_UID);
+                const isSpeaking = isAi ? !!aiParticipant.session?.speaking : p.isSpeaking;
+                return (
+                  <div key={p.uid} className="flex items-center justify-between p-3 rounded-xl bg-white/5">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${
+                        p.isLocal ? 'bg-[#33d1ff] text-black' : isAi ? 'bg-purple-500 text-white' : 'bg-white/10 text-white'
+                      }`}>
+                        {p.name.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium flex items-center gap-1.5">
+                          {p.name}
+                          {isAi && <span className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded-full">AI</span>}
+                          {p.isLocal && <span className="text-[10px] bg-[#33d1ff]/20 text-[#33d1ff] px-1.5 py-0.5 rounded-full">You</span>}
+                        </p>
+                        <p className="text-xs text-white/40">{p.role}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <AudioVisualizer isSpeaking={isSpeaking} isMuted={p.isMuted} />
+                      {isSpeaking ? (
+                        <span className="text-[10px] text-green-400 font-medium">Speaking</span>
+                      ) : p.isMuted ? (
+                        <span className="text-[10px] text-red-400">Muted</span>
+                      ) : (
+                        <span className="text-[10px] text-white/30">Idle</span>
+                      )}
+                    </div>
                   </div>
+                );
+              })}
+            </div>
+
+            {/* Live transcript */}
+            <div className="transcript-panel p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-[#33d1ff] uppercase tracking-wider">Live transcript</p>
+                <span className="text-[10px] text-white/40 bg-white/5 px-2 py-0.5 rounded-full">{transcription.status.status}</span>
+              </div>
+              <div className="max-h-48 overflow-y-auto space-y-2">
+                {crtSegments.length === 0 && (
+                  <p className="text-center text-xs text-white/30 py-4">Listening...</p>
                 )}
-                {transcription.segments.map((t: LiveTranscriptSegment, i: number) => (
+                {crtSegments.map((t, i) => (
                   <LiveTranscriptBubble key={`${t.id}-${i}`} seg={t} />
                 ))}
               </div>
             </div>
 
-            {/* Action buttons panel */}
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={toggleMute}
-                className="flex-1 py-3.5 btn-mechanical-chassis rounded-2xl font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer border border-white/40 dark:border-white/5"
-              >
-                {isMuted ? <Mic className="w-4 h-4 text-emerald-500" /> : <MicOff className="w-4 h-4 text-rose-500" />}
-                <span>{isMuted ? 'UNMUTE MIC' : 'MUTE MIC'}</span>
+            {/* Controls */}
+            <div className="flex gap-3">
+              <button onClick={toggleMute} className="flex-1 btn-landing-outline justify-center py-3">
+                {isMuted ? <Mic className="w-4 h-4 text-green-400" /> : <MicOff className="w-4 h-4 text-red-400" />}
+                {isMuted ? 'Unmute' : 'Mute'}
               </button>
-              <button
-                onClick={leaveChannel}
-                className="py-3.5 px-6 btn-mechanical-primary rounded-2xl font-mono font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-industrial-accent"
-              >
+              <button onClick={leaveChannel} className="btn-landing-primary py-3 px-6">
                 <PhoneOff className="w-4 h-4" />
-                <span>DISCONNECT</span>
+                Leave
               </button>
             </div>
           </div>
@@ -389,21 +379,20 @@ export default function VoiceRoom({ params }: PageProps) {
 }
 
 function LiveTranscriptBubble({ seg }: { seg: LiveTranscriptSegment }) {
-  const time = new Date(seg.timestamp).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+  const time = new Date(seg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const isAI = seg.speakerName === AI_PARTICIPANT_NAME;
 
   return (
-    <div className="space-y-0.5 font-mono">
-      <div className="flex items-center justify-between text-[9px] text-emerald-600">
-        <span className="font-bold uppercase">[{seg.speakerName || seg.speaker}]</span>
+    <div className="space-y-0.5">
+      <div className="flex items-center justify-between text-[10px] text-white/40">
+        <span className={isAI ? 'text-purple-400 font-medium' : ''}>{seg.speakerName || seg.speaker}</span>
         <span>{time}</span>
       </div>
-      <div className="p-2 rounded bg-black/50 border border-emerald-900/40 text-[11px] leading-relaxed text-emerald-300">
+      <div className={`p-2.5 rounded-lg text-xs leading-relaxed ${
+        isAI ? 'bg-purple-500/10 border border-purple-500/20 text-purple-200' : 'bg-white/5 text-white/70'
+      }`}>
         {seg.text}
-        {!seg.isFinal && <span className="ml-1 text-[#ff4757] animate-pulse">▍</span>}
+        {!seg.isFinal && <span className="ml-1 text-[#33d1ff] animate-pulse">▍</span>}
       </div>
     </div>
   );

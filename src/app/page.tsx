@@ -1,452 +1,561 @@
 'use client';
 
-import { useRef } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
-import { motion, useScroll, useTransform } from 'motion/react';
-import { useTheme } from '@/components/ThemeProvider';
-import ThemeToggle from '@/components/ThemeToggle';
+import { motion } from 'motion/react';
 import {
+  ArrowUpRight,
   Radio,
-  BarChart3,
   ShieldCheck,
-  ArrowRight,
-  Zap,
-  Activity,
-  CheckCircle2,
+  BarChart3,
+  Mic,
+  Brain,
   Clock,
-  Volume2,
-  AlertTriangle,
-  Cpu,
-  Terminal,
-  Sliders,
-  Sparkles,
-  Server,
-  Layers,
-  PhoneCall
+  Users,
+  CheckCircle2,
+  Globe,
+  Zap,
+  Lock,
 } from 'lucide-react';
+import LandingHeader from '@/components/landing/LandingHeader';
+import LandingFooter from '@/components/landing/LandingFooter';
+
+const tabs = [
+  { id: 'voice', label: 'Voice AI Bridge' },
+  { id: 'analysis', label: 'Live Analysis' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'approvals', label: 'Approvals' },
+  { id: 'postmortem', label: 'Post-Mortem' },
+];
+
+const features = [
+  {
+    icon: Radio,
+    title: 'Voice bridge',
+    desc: 'Join a live call with your team. AI listens, speaks, and keeps everyone on the same page during an outage.',
+  },
+  {
+    icon: Brain,
+    title: 'Smart analysis',
+    desc: 'AI reads what people say and checks it against your data. It flags wrong info before it spreads.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Conflict detection',
+    desc: 'When two people disagree, the system spots it and asks the team to confirm the facts.',
+  },
+  {
+    icon: Clock,
+    title: 'Live timeline',
+    desc: 'Every action, decision, and update is saved in order. You can replay the full incident later.',
+  },
+  {
+    icon: Users,
+    title: 'Team approvals',
+    desc: 'Risky moves need a sign-off. The AI asks for approval before running important actions.',
+  },
+  {
+    icon: BarChart3,
+    title: 'Post-mortem reports',
+    desc: 'When the incident ends, get a clean summary with root cause, timeline, and lessons learned.',
+  },
+];
+
+const useCases = [
+  {
+    title: 'Production outages',
+    desc: 'Run a voice bridge when your app goes down. AI helps triage, track actions, and write the report.',
+    gradient: 'from-purple-900/40 to-indigo-900/40',
+  },
+  {
+    title: 'Security incidents',
+    desc: 'Keep a clear record of who said what during a breach response. Every decision is logged.',
+    gradient: 'from-blue-900/40 to-cyan-900/40',
+  },
+  {
+    title: 'On-call handoffs',
+    desc: 'Pass context between shifts with a full voice timeline. No more lost notes or missed details.',
+    gradient: 'from-emerald-900/40 to-teal-900/40',
+  },
+];
+
+function ArrowBtn({ className = '' }: { className?: string }) {
+  return (
+    <span className={`w-5 h-5 rounded-full bg-black flex items-center justify-center shrink-0 ${className}`}>
+      <ArrowUpRight className="w-3 h-3 text-white" />
+    </span>
+  );
+}
 
 export default function Home() {
-  const { isDark } = useTheme();
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Scroll-Driven Parallax & Blur Transforms
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ['start start', 'end end'],
-  });
-
-  const heroScale = useTransform(scrollYProgress, [0, 0.25], [1, 0.94]);
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.25], [1, 0.6]);
-  const heroFilter = useTransform(scrollYProgress, [0, 0.25], ['blur(0px)', 'blur(8px)']);
-  const heroY = useTransform(scrollYProgress, [0, 0.25], [0, -40]);
-
-  const consoleScale = useTransform(scrollYProgress, [0.05, 0.35], [0.95, 1.02]);
-  const consoleRotateX = useTransform(scrollYProgress, [0.05, 0.35], [8, 0]);
+  const [activeTab, setActiveTab] = useState('voice');
+  const [cookieAccepted, setCookieAccepted] = useState(false);
 
   return (
-    <div
-      ref={containerRef}
-      className={`min-h-screen font-sans flex flex-col relative transition-colors duration-300 ${
-        isDark ? 'bg-[#141720] text-[#f1f5f9]' : 'bg-[#e0e5ec] text-[#2d3436]'
-      }`}
-    >
-      {/* Top Scroll Progress Bar */}
-      <motion.div
-        className="fixed top-0 left-0 right-0 h-1 bg-[#ff4757] origin-left z-50 shadow-[0_0_8px_#ff4757]"
-        style={{ scaleX: scrollYProgress }}
-      />
+    <div className="landing-bg min-h-screen font-sans">
+      <LandingHeader />
 
-      {/* Industrial Machine Header */}
-      <header className="sticky top-0 z-40 px-6 py-4">
-        <div
-          className={`max-w-7xl mx-auto px-6 h-16 rounded-2xl flex items-center justify-between border transition-all duration-300 shadow-industrial-card ${
-            isDark
-              ? 'bg-[#1b202c]/90 border-[#232a3a]'
-              : 'bg-[#f0f2f5]/90 border-white/60'
-          }`}
-        >
-          {/* Logo & Hardware Identifier */}
-          <div className="flex items-center gap-3.5">
-            <div className="w-9 h-9 rounded-xl bg-[#ff4757] text-white flex items-center justify-center font-bold text-lg shadow-industrial-accent active:translate-y-0.5">
-              <Zap className="w-5 h-5 fill-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-base tracking-tight font-sans embossed-text">
-                  AI Incident Commander
-                </span>
-                <span className="hidden sm:inline-block px-1.5 py-0.5 text-[9px] font-mono font-bold uppercase rounded bg-[#d1d9e6] dark:bg-[#0e1017] text-slate-700 dark:text-slate-300 border border-black/5 dark:border-white/10">
-                  REV 4.2
-                </span>
-              </div>
-            </div>
-          </div>
+      {/* Announcement banner */}
+      <div className="gradient-banner py-2.5 px-4 text-center">
+        <p className="text-sm font-medium text-black">
+          Introducing AI Voice Incident Commander — Run outage calls with real-time AI help
+        </p>
+      </div>
 
-          {/* System Telemetry & Controls */}
-          <div className="flex items-center gap-3 sm:gap-5">
-            {/* LED Status Beacon */}
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full shadow-industrial-recessed bg-[#d1d9e6] dark:bg-[#0e1017]">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 led-glow-green animate-pulse" />
-              <span className="text-[10px] font-mono font-bold tracking-wider text-slate-700 dark:text-slate-300 uppercase">
-                SYS.ONLINE
-              </span>
-            </div>
-
-            <Link
-              href="/incidents"
-              className="text-xs font-mono font-bold uppercase tracking-wider px-3 py-2 rounded-xl transition-colors hover:text-[#ff4757]"
-            >
-              Control Hub
-            </Link>
-
-            <Link
-              href="/incidents/new"
-              className="btn-mechanical-primary px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase tracking-wider hidden sm:flex items-center gap-1.5"
-            >
-              <AlertTriangle className="w-3.5 h-3.5" />
-              <span>Declare Outage</span>
-            </Link>
-
-            {/* Vertical Chassis Groove */}
-            <div className="h-6 w-1 rounded-full bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed" />
-
-            {/* Machined Theme Toggle */}
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="flex-1 max-w-7xl mx-auto px-6 py-8 sm:py-12 flex flex-col justify-center relative space-y-20 sm:space-y-28">
-        
-        {/* HERO SECTION */}
-        <motion.section
-          style={{
-            scale: heroScale,
-            opacity: heroOpacity,
-            filter: heroFilter,
-            y: heroY,
-          }}
-          className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center pt-4 sm:pt-8"
-        >
-          {/* Left Hero Column */}
-          <div className="lg:col-span-7 space-y-6">
-            {/* Stamped Model Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-[#ff4757] led-glow-red animate-pulse" />
-              <span>MODULE // AI-CMD-4000 // TACTILE DISPATCH</span>
-            </div>
-
-            <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight font-sans leading-[1.05] embossed-text">
-              Autonomous Voice AI Incident <span className="text-[#ff4757]">Commander.</span>
-            </h1>
-
-            <p className="text-base sm:text-lg text-[#4a5568] dark:text-[#94a3b8] leading-relaxed max-w-2xl font-medium">
-              A high-precision operational voice bridge with real-time autonomous situational intelligence, dynamic conflict arbitration, timeline recording, and verifiable decision governance.
-            </p>
-
-            {/* Hardware Push-Buttons */}
-            <div className="flex flex-wrap items-center gap-4 pt-2">
-              <Link
-                href="/incidents/new"
-                className="btn-mechanical-primary px-6 py-3.5 rounded-2xl font-mono font-bold text-sm tracking-wider uppercase flex items-center gap-2.5 cursor-pointer"
-              >
-                <Radio className="w-4 h-4 animate-pulse" />
-                <span>Initialize Voice Bridge</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-
-              <Link
-                href="/incidents"
-                className="btn-mechanical-chassis px-6 py-3.5 rounded-2xl font-mono font-bold text-sm tracking-wider uppercase border border-white/50 dark:border-white/5 flex items-center gap-2 cursor-pointer"
-              >
-                <Terminal className="w-4 h-4" />
-                <span>Mission Dashboard</span>
-              </Link>
-            </div>
-
-            {/* Spec Readout Row */}
-            <div className="pt-6 grid grid-cols-3 gap-3 max-w-lg">
-              <div className="p-3 rounded-xl bg-[#d1d9e6]/50 dark:bg-[#0e1017]/60 shadow-industrial-recessed text-center">
-                <div className="text-[10px] font-mono uppercase text-slate-500 font-bold">LATENCY</div>
-                <div className="text-base font-mono font-black text-[#ff4757] mt-0.5">&lt; 180ms</div>
-              </div>
-              <div className="p-3 rounded-xl bg-[#d1d9e6]/50 dark:bg-[#0e1017]/60 shadow-industrial-recessed text-center">
-                <div className="text-[10px] font-mono uppercase text-slate-500 font-bold">SPEAKER STT</div>
-                <div className="text-base font-mono font-black text-emerald-500 mt-0.5">MULTI-TRACK</div>
-              </div>
-              <div className="p-3 rounded-xl bg-[#d1d9e6]/50 dark:bg-[#0e1017]/60 shadow-industrial-recessed text-center">
-                <div className="text-[10px] font-mono uppercase text-slate-500 font-bold">GOVERNANCE</div>
-                <div className="text-base font-mono font-black text-indigo-500 mt-0.5">VERIFIED</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Hero Column: 3D Hardware Control Console Device */}
+      <main>
+        {/* ── Hero ── */}
+        <section className="max-w-7xl mx-auto px-6 pt-20 pb-16 text-center">
           <motion.div
-            style={{
-              scale: consoleScale,
-              rotateX: consoleRotateX,
-              transformPerspective: 1000,
-            }}
-            className="lg:col-span-5 relative"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
           >
-            {/* Outer Machine Chassis Bezel with Corner Screws & Vent Slots */}
-            <div
-              className={`p-6 rounded-3xl border relative transition-all duration-300 shadow-industrial-floating corner-screws ${
-                isDark
-                  ? 'bg-[#1b202c] border-[#2e374c]'
-                  : 'bg-[#f0f2f5] border-white'
-              }`}
-            >
-              {/* Top Hardware Panel with Model Name & Cooling Vent Slits */}
-              <div className="flex items-center justify-between pb-4 border-b border-black/5 dark:border-white/10">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-[#ff4757] led-glow-red animate-pulse" />
-                  <span className="text-[10px] font-mono font-extrabold uppercase tracking-widest text-[#4a5568] dark:text-[#94a3b8]">
-                    LIVE BRIDGE MONITOR // CH-01
-                  </span>
-                </div>
+            <span className="inline-block px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-white/60 uppercase tracking-widest mb-8">
+              Voice AI Tool
+            </span>
+            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight mb-6">
+              Incident Commander
+            </h1>
+            <p className="text-lg sm:text-xl text-white/50 max-w-2xl mx-auto leading-relaxed">
+              The easiest way to add{' '}
+              <span className="gradient-text font-semibold">real-time voice AI</span>{' '}
+              to your outage response — live calls, smart analysis, and full audit trails.
+            </p>
+          </motion.div>
 
-                {/* 3 Recessed Cooling Vent Slots */}
-                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed">
-                  <div className="h-4 w-1 rounded-full bg-slate-400/60 dark:bg-slate-700" />
-                  <div className="h-4 w-1 rounded-full bg-slate-400/60 dark:bg-slate-700" />
-                  <div className="h-4 w-1 rounded-full bg-slate-400/60 dark:bg-slate-700" />
+          {/* Product preview mockup */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="mt-16 mx-auto max-w-4xl"
+          >
+            <div className="landing-card p-1 rounded-2xl overflow-hidden">
+              <div className="bg-[#0d0d0d] rounded-xl p-6">
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-green-500/80" />
+                  <span className="ml-3 text-xs text-white/30 font-mono">incident-bridge.live</span>
                 </div>
-              </div>
-
-              {/* Inner CRT Screen with Scanlines */}
-              <div className="mt-4 rounded-2xl crt-screen p-5 text-emerald-400 font-mono text-xs shadow-industrial-recessed border border-emerald-950/60 space-y-4">
-                {/* CRT Header */}
-                <div className="flex items-center justify-between border-b border-emerald-900/60 pb-2 text-[10px]">
-                  <span className="text-emerald-400 font-bold flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
-                    CHANNEL: SEV1-OUTAGE-TRIAGE
-                  </span>
-                  <span className="text-emerald-600">FPS: 60 // 48kHz PCM</span>
-                </div>
-
-                {/* Simulated Live Transcript Logs */}
-                <div className="space-y-2 text-[11px] leading-relaxed">
-                  <div className="p-2 rounded bg-emerald-950/40 border border-emerald-800/40">
-                    <span className="text-[#ff4757] font-bold">[RAHUL / ENG]:</span> &quot;Spike confirmed on checkout microservice. Error rate at 42%.&quot;
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="landing-card p-4 space-y-3">
+                    <p className="text-xs text-white/40 uppercase tracking-wider">Agent Type</p>
+                    <div className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-2 text-sm">
+                      <span>Outage Commander</span>
+                      <span className="text-white/30">▾</span>
+                    </div>
+                    <p className="text-xs text-white/40 uppercase tracking-wider mt-2">Model</p>
+                    <div className="flex items-center justify-between bg-white/5 rounded-lg px-3 py-2 text-sm">
+                      <span>GPT-4o Mini</span>
+                      <span className="text-white/30">▾</span>
+                    </div>
                   </div>
-                  <div className="p-2 rounded bg-emerald-950/40 border border-emerald-800/40">
-                    <span className="text-indigo-400 font-bold">[AI COMMANDER]:</span> &quot;Discrepancy detected between app server logs and DB metric graph. Conflict logged.&quot;
+                  <div className="flex items-center justify-center py-8">
+                    <div className="phone-mockup">
+                      <div className="bg-gradient-to-b from-purple-950 to-indigo-950 p-6 flex flex-col items-center justify-center h-48 relative">
+                        <div className="voice-orb" />
+                        <p className="text-xs text-white/60 mt-4">AI Commander</p>
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          {[...Array(3)].map((_, i) => (
+                            <div
+                              key={i}
+                              className="absolute rounded-full border border-white/10"
+                              style={{ width: 60 + i * 40, height: 60 + i * 40 }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div className="p-4 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Mic className="w-4 h-4 text-red-400" />
+                          <span className="text-xs text-white/50">Live — 4 participants</span>
+                        </div>
+                        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full w-3/4 bg-gradient-to-r from-purple-500 to-cyan-400 rounded-full" />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="p-2 rounded bg-emerald-950/40 border border-emerald-800/40">
-                    <span className="text-amber-400 font-bold">[PRIYA / SRE]:</span> &quot;Authorizing immediate canary rollback for release v2.4.1.&quot;
-                  </div>
-                </div>
-
-                {/* Hardware Audio Scope Visualization */}
-                <div className="p-2 rounded bg-black/60 border border-emerald-900/40 flex items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    {[16, 28, 42, 20, 36, 48, 24, 38, 18, 30, 44, 22, 34, 46].map((h, i) => (
-                      <motion.div
-                        key={i}
-                        animate={{ height: [h * 0.4, h * 0.9, h * 0.5] }}
-                        transition={{ repeat: Infinity, duration: 1.2 + (i % 3) * 0.2, ease: 'easeInOut' }}
-                        className="w-1.5 bg-gradient-to-t from-emerald-600 via-emerald-400 to-[#ff4757] rounded-full"
-                        style={{ height: `${h * 0.6}px` }}
-                      />
+                  <div className="landing-card p-4 space-y-3">
+                    <p className="text-xs text-white/40 uppercase tracking-wider">Features</p>
+                    {['Recording', 'Live transcript', 'Auto timeline'].map((f, i) => (
+                      <div key={f} className="flex items-center justify-between text-sm">
+                        <span className="text-white/70">{f}</span>
+                        <div className={`w-9 h-5 rounded-full flex items-center px-0.5 ${i < 2 ? 'bg-[#33d1ff] justify-end' : 'bg-white/10 justify-start'}`}>
+                          <div className="w-4 h-4 rounded-full bg-white shadow" />
+                        </div>
+                      </div>
                     ))}
                   </div>
-                  <div className="text-[10px] text-right text-emerald-500 font-bold">
-                    <div>MIC 01: ACTIVE</div>
-                    <div className="text-[8px] text-emerald-700">RMS: -14 dBFS</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Hardware Push Switches */}
-              <div className="mt-4 flex items-center justify-between pt-2">
-                <div className="flex gap-2">
-                  <button className="w-8 h-8 rounded-lg bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-sharp active:shadow-industrial-recessed flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-300">
-                    M1
-                  </button>
-                  <button className="w-8 h-8 rounded-lg bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-sharp active:shadow-industrial-recessed flex items-center justify-center text-xs font-bold text-slate-700 dark:text-slate-300">
-                    M2
-                  </button>
-                  <button className="w-8 h-8 rounded-lg bg-[#ff4757] text-white shadow-industrial-accent active:shadow-industrial-accent-pressed flex items-center justify-center text-xs font-bold">
-                    REC
-                  </button>
-                </div>
-
-                <div className="text-[9px] font-mono uppercase text-slate-500 font-bold">
-                  SERIAL #4092-A
                 </div>
               </div>
             </div>
           </motion.div>
-        </motion.section>
+        </section>
 
-        {/* PHYSICAL CONNECTING CONDUIT PIPE */}
-        <div className="hidden md:flex items-center gap-4 px-12">
-          <div className="conduit-pipe" />
-          <span className="text-[10px] font-mono uppercase font-bold text-slate-500 whitespace-nowrap">
-            SIGNAL BUS // TRIAGE ARCHITECTURE
-          </span>
-          <div className="conduit-pipe" />
-        </div>
-
-        {/* MODULAR HARDWARE FEATURE DECK ("BOLTED MODULES") */}
-        <section className="space-y-8">
-          <div className="space-y-2 text-center max-w-2xl mx-auto">
-            <h2 className="text-2xl sm:text-4xl font-extrabold font-sans tracking-tight embossed-text">
-              Engineered for Incident Mission Control
+        {/* ── Customize section ── */}
+        <section className="max-w-7xl mx-auto px-6 py-24 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div>
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-6 leading-tight">
+              Customize anything &amp; everything
             </h2>
-            <p className="text-sm text-[#4a5568] dark:text-[#94a3b8] font-medium">
-              Physical precision modules inspired by Dieter Rams engineering and mission control avionics.
+            <p className="text-white/50 text-lg leading-relaxed mb-8">
+              Set up your voice bridge in minutes. Pick your AI model, write a custom prompt,
+              and connect it to your incident workflow — all from a simple dashboard.
             </p>
+            <Link href="/incidents/new" className="btn-landing-outline">
+              Go to Quickstart
+              <ArrowBtn className="!bg-white" />
+            </Link>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Feature 1 */}
-            <div
-              className={`p-8 rounded-3xl border relative transition-all duration-300 shadow-industrial-card hover:-translate-y-1.5 hover:shadow-industrial-floating corner-screws group ${
-                isDark ? 'bg-[#1b202c] border-[#232a3a]' : 'bg-[#f0f2f5] border-white'
-              }`}
-            >
-              {/* Recessed Icon Housing */}
-              <div className="w-14 h-14 rounded-2xl bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed flex items-center justify-center mb-6 group-hover:scale-105 transition-transform">
-                <Radio className="w-7 h-7 text-[#ff4757]" />
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-[10px] font-mono font-bold uppercase text-[#ff4757] tracking-wider">
-                  MODULE 01 // AUDIO DSP
-                </div>
-                <h3 className="text-xl font-bold font-sans">Low-Latency Voice Intercom</h3>
-                <p className="text-sm text-[#4a5568] dark:text-[#94a3b8] leading-relaxed">
-                  Real-time Agora multi-party audio pipeline with live speaker isolation, automated noise suppression, and synchronized STT.
-                </p>
-              </div>
+          <div className="code-block p-6">
+            <div className="flex gap-1.5 mb-4">
+              <div className="w-3 h-3 rounded-full bg-red-500/60" />
+              <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
+              <div className="w-3 h-3 rounded-full bg-green-500/60" />
             </div>
+            <pre className="text-white/80 overflow-x-auto">
+              <code>{`// Start a voice incident bridge
+const bridge = await commander.create({
+  title: "Checkout outage SEV1",
+  aiAgent: "outage-commander",
+  model: "gpt-4o-mini",
+  features: {
+    recording: true,
+    liveTranscript: true,
+    autoTimeline: true,
+  },
+});
 
-            {/* Feature 2 */}
-            <div
-              className={`p-8 rounded-3xl border relative transition-all duration-300 shadow-industrial-card hover:-translate-y-1.5 hover:shadow-industrial-floating corner-screws group ${
-                isDark ? 'bg-[#1b202c] border-[#232a3a]' : 'bg-[#f0f2f5] border-white'
-              }`}
-            >
-              {/* Recessed Icon Housing */}
-              <div className="w-14 h-14 rounded-2xl bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed flex items-center justify-center mb-6 group-hover:scale-105 transition-transform">
-                <ShieldCheck className="w-7 h-7 text-[#ff4757]" />
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-[10px] font-mono font-bold uppercase text-[#ff4757] tracking-wider">
-                  MODULE 02 // ARBITRATION
-                </div>
-                <h3 className="text-xl font-bold font-sans">Conflict Detection &amp; Facts</h3>
-                <p className="text-sm text-[#4a5568] dark:text-[#94a3b8] leading-relaxed">
-                  Autonomous LLM extraction that verifies hypotheses against monitoring evidence and highlights contradictory engineering statements.
-                </p>
-              </div>
-            </div>
-
-            {/* Feature 3 */}
-            <div
-              className={`p-8 rounded-3xl border relative transition-all duration-300 shadow-industrial-card hover:-translate-y-1.5 hover:shadow-industrial-floating corner-screws group ${
-                isDark ? 'bg-[#1b202c] border-[#232a3a]' : 'bg-[#f0f2f5] border-white'
-              }`}
-            >
-              {/* Recessed Icon Housing */}
-              <div className="w-14 h-14 rounded-2xl bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed flex items-center justify-center mb-6 group-hover:scale-105 transition-transform">
-                <BarChart3 className="w-7 h-7 text-[#ff4757]" />
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-[10px] font-mono font-bold uppercase text-[#ff4757] tracking-wider">
-                  MODULE 03 // GOVERNANCE
-                </div>
-                <h3 className="text-xl font-bold font-sans">Verifiable Post-Mortems</h3>
-                <p className="text-sm text-[#4a5568] dark:text-[#94a3b8] leading-relaxed">
-                  Tamper-evident audit timeline tracking actions, commander approvals, hypothesis verification, and executive executive summaries.
-                </p>
-              </div>
-            </div>
+// Join the live call
+await bridge.join({ role: "commander" });`}</code>
+            </pre>
           </div>
         </section>
 
-        {/* DARK INSTRUMENT PANEL STATS STRIP */}
-        <section className="p-8 sm:p-12 rounded-3xl bg-[#1e2430] text-white border border-[#2e374c] shadow-industrial-floating relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4">
-            <div className="flex gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 led-glow-green animate-pulse" />
-              <div className="w-2 h-2 rounded-full bg-[#ff4757] led-glow-red" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center sm:text-left">
-            <div className="space-y-1">
-              <div className="text-[10px] font-mono uppercase tracking-widest text-[#94a3b8]">RESOLUTION VELOCITY</div>
-              <div className="text-3xl sm:text-4xl font-mono font-black text-[#ff4757]">3.4x</div>
-              <p className="text-xs text-slate-400">Faster MTTR to full mitigation</p>
-            </div>
-
-            <div className="space-y-1">
-              <div className="text-[10px] font-mono uppercase tracking-widest text-[#94a3b8]">EVIDENCE ACCURACY</div>
-              <div className="text-3xl sm:text-4xl font-mono font-black text-emerald-400">99.4%</div>
-              <p className="text-xs text-slate-400">Verified factual claims</p>
-            </div>
-
-            <div className="space-y-1">
-              <div className="text-[10px] font-mono uppercase tracking-widest text-[#94a3b8]">VOICE SYNCHRONIZATION</div>
-              <div className="text-3xl sm:text-4xl font-mono font-black text-indigo-400">&lt; 200ms</div>
-              <p className="text-xs text-slate-400">Global Agora edge latency</p>
-            </div>
-
-            <div className="space-y-1">
-              <div className="text-[10px] font-mono uppercase tracking-widest text-[#94a3b8]">AUDIT TIMELINE</div>
-              <div className="text-3xl sm:text-4xl font-mono font-black text-amber-400">100%</div>
-              <p className="text-xs text-slate-400">Deterministic event replay</p>
-            </div>
-          </div>
-        </section>
-
-        {/* BOTTOM CTA CHASSIS PANEL */}
-        <section
-          className={`p-8 sm:p-12 rounded-3xl border text-center space-y-6 shadow-industrial-card corner-screws ${
-            isDark ? 'bg-[#1b202c] border-[#232a3a]' : 'bg-[#f0f2f5] border-white'
-          }`}
-        >
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed text-xs font-mono font-bold text-slate-700 dark:text-slate-300">
-            <span>OPERATIONAL BRIDGE ACTIVE</span>
-          </div>
-
-          <h2 className="text-3xl sm:text-4xl font-extrabold font-sans tracking-tight embossed-text max-w-xl mx-auto">
-            Ready to Take Autonomous Incident Command?
+        {/* ── Deploy fast + tabs ── */}
+        <section className="max-w-7xl mx-auto px-6 py-24 text-center">
+          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-4">
+            Fix outages faster
           </h2>
-
-          <p className="text-sm text-[#4a5568] dark:text-[#94a3b8] max-w-md mx-auto">
-            Initialize an outage bridge or inspect active incidents with tactile precision.
+          <p className="text-white/50 text-lg max-w-xl mx-auto mb-12">
+            Pre-built tools for voice calls, live analysis, and incident tracking — ready to use today.
           </p>
 
-          <div className="flex flex-wrap justify-center gap-4 pt-2">
-            <Link
-              href="/incidents/new"
-              className="btn-mechanical-primary px-8 py-3.5 rounded-2xl font-mono font-bold text-sm tracking-wider uppercase flex items-center gap-2 cursor-pointer"
-            >
-              <span>Declare Outage Incident</span>
-              <ArrowRight className="w-4 h-4" />
+          <div className="inline-flex flex-wrap justify-center gap-1 p-1.5 rounded-full bg-white/5 border border-white/10 mb-12">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`tab-pill ${activeTab === tab.id ? 'tab-pill-active' : ''}`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="landing-card rounded-2xl p-8 sm:p-12 bg-gradient-to-br from-blue-950/50 to-indigo-950/30 min-h-[280px] flex items-center justify-center">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-2xl w-full">
+              {activeTab === 'voice' && (
+                <>
+                  <div className="landing-card p-5 text-left">
+                    <Mic className="w-6 h-6 text-[#33d1ff] mb-3" />
+                    <p className="font-semibold mb-1">Live voice call</p>
+                    <p className="text-sm text-white/50">Talk with your team. AI joins and listens in real time.</p>
+                  </div>
+                  <div className="landing-card p-5 text-left">
+                    <Radio className="w-6 h-6 text-purple-400 mb-3" />
+                    <p className="font-semibold mb-1">Multi-party audio</p>
+                    <p className="text-sm text-white/50">Everyone hears the same AI updates at the same time.</p>
+                  </div>
+                </>
+              )}
+              {activeTab === 'analysis' && (
+                <>
+                  <div className="landing-card p-5 text-left">
+                    <Brain className="w-6 h-6 text-[#33d1ff] mb-3" />
+                    <p className="font-semibold mb-1">Fact checking</p>
+                    <p className="text-sm text-white/50">AI checks claims against your monitoring data.</p>
+                  </div>
+                  <div className="landing-card p-5 text-left">
+                    <ShieldCheck className="w-6 h-6 text-purple-400 mb-3" />
+                    <p className="font-semibold mb-1">Conflict alerts</p>
+                    <p className="text-sm text-white/50">Spots when two people say different things.</p>
+                  </div>
+                </>
+              )}
+              {activeTab === 'timeline' && (
+                <>
+                  <div className="landing-card p-5 text-left">
+                    <Clock className="w-6 h-6 text-[#33d1ff] mb-3" />
+                    <p className="font-semibold mb-1">Event log</p>
+                    <p className="text-sm text-white/50">Every action saved with a timestamp.</p>
+                  </div>
+                  <div className="landing-card p-5 text-left">
+                    <BarChart3 className="w-6 h-6 text-purple-400 mb-3" />
+                    <p className="font-semibold mb-1">Full replay</p>
+                    <p className="text-sm text-white/50">Go back and see exactly what happened and when.</p>
+                  </div>
+                </>
+              )}
+              {activeTab === 'approvals' && (
+                <>
+                  <div className="landing-card p-5 text-left">
+                    <CheckCircle2 className="w-6 h-6 text-[#33d1ff] mb-3" />
+                    <p className="font-semibold mb-1">Sign-off flow</p>
+                    <p className="text-sm text-white/50">Risky actions need team approval first.</p>
+                  </div>
+                  <div className="landing-card p-5 text-left">
+                    <Users className="w-6 h-6 text-purple-400 mb-3" />
+                    <p className="font-semibold mb-1">Role-based access</p>
+                    <p className="text-sm text-white/50">Only the right people can approve big changes.</p>
+                  </div>
+                </>
+              )}
+              {activeTab === 'postmortem' && (
+                <>
+                  <div className="landing-card p-5 text-left">
+                    <BarChart3 className="w-6 h-6 text-[#33d1ff] mb-3" />
+                    <p className="font-semibold mb-1">Auto summary</p>
+                    <p className="text-sm text-white/50">AI writes the post-mortem from the live timeline.</p>
+                  </div>
+                  <div className="landing-card p-5 text-left">
+                    <Lock className="w-6 h-6 text-purple-400 mb-3" />
+                    <p className="font-semibold mb-1">Audit trail</p>
+                    <p className="text-sm text-white/50">Tamper-proof record for compliance and review.</p>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Features grid ── */}
+        <section id="features" className="max-w-7xl mx-auto px-6 py-24">
+          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight text-center mb-16">
+            What you get
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-12">
+            {features.map((f) => (
+              <div key={f.title} className="flex gap-5 landing-card-hover">
+                <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
+                  <f.icon className="w-5 h-5 text-white/60" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold mb-2">{f.title}</h3>
+                  <p className="text-white/50 leading-relaxed">{f.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Bento grid ── */}
+        <section className="max-w-7xl mx-auto px-6 py-24">
+          <div className="bento-grid">
+            <div className="landing-card landing-card-hover p-6 col-span-1">
+              <h3 className="font-bold text-lg mb-2">Fast setup</h3>
+              <p className="text-sm text-white/50 mb-6">Start a voice bridge in under 2 minutes. No complex config needed.</p>
+              <div className="flex items-end gap-1 h-16">
+                {[40, 65, 45, 80, 55, 90, 70].map((h, i) => (
+                  <div key={i} className="flex-1 bg-gradient-to-t from-[#33d1ff]/30 to-[#33d1ff] rounded-sm" style={{ height: `${h}%` }} />
+                ))}
+              </div>
+            </div>
+
+            <div className="landing-card landing-card-hover p-6 col-span-1">
+              <h3 className="font-bold text-lg mb-4">Built to stay online</h3>
+              <div className="space-y-3">
+                {[
+                  { label: '99.99% uptime', icon: Zap },
+                  { label: '24/7 voice support', icon: Globe },
+                  { label: 'Zero data loss', icon: Lock },
+                ].map(({ label, icon: Icon }) => (
+                  <div key={label} className="flex items-center gap-3 text-sm">
+                    <Icon className="w-4 h-4 text-[#33d1ff]" />
+                    <span className="text-white/70">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="landing-card landing-card-hover p-6 col-span-1">
+              <h3 className="font-bold text-lg mb-4">Full control</h3>
+              <div className="space-y-3">
+                <div className="flex gap-2">
+                  {['#33d1ff', '#a855f7', '#06b6d4', '#f97316'].map((c) => (
+                    <div key={c} className="w-8 h-8 rounded-lg" style={{ background: c }} />
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  {['HD', 'FHD', '4K'].map((r, i) => (
+                    <span key={r} className={`text-xs px-2 py-1 rounded-md ${i === 1 ? 'bg-white text-black' : 'bg-white/10 text-white/60'}`}>{r}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="landing-card landing-card-hover p-6 col-span-1">
+              <h3 className="font-bold text-lg mb-2">Global reach</h3>
+              <p className="text-sm text-white/50 mb-4">Low-latency voice in 200+ countries via Agora.</p>
+              <div className="relative h-20 overflow-hidden rounded-lg bg-white/5">
+                <div className="absolute inset-0 opacity-30" style={{
+                  backgroundImage: 'radial-gradient(circle, #33d1ff 1px, transparent 1px)',
+                  backgroundSize: '8px 8px',
+                }} />
+              </div>
+            </div>
+
+            <div className="landing-card landing-card-hover p-6 col-span-2">
+              <h3 className="font-bold text-lg mb-2">Ready for your team</h3>
+              <p className="text-sm text-white/50 mb-6">Built with security and compliance in mind for production use.</p>
+              <div className="flex gap-4">
+                {['SOC 2', 'GDPR', 'HIPAA'].map((badge) => (
+                  <div key={badge} className="w-16 h-16 rounded-full bg-[#33d1ff]/10 border border-[#33d1ff]/30 flex items-center justify-center text-xs font-bold text-[#33d1ff]">
+                    {badge}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="landing-card landing-card-hover p-6 col-span-2">
+              <h3 className="font-bold text-lg mb-2">Easy to connect</h3>
+              <p className="text-sm text-white/50 mb-4">Works with your existing stack — Next.js, Prisma, OpenAI, and Agora SDK.</p>
+              <div className="code-block p-4 text-xs">
+                <code className="text-emerald-400">npm install</code>
+                <span className="text-white/60"> && </span>
+                <code className="text-emerald-400">npm run dev</code>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Why section ── */}
+        <section className="max-w-7xl mx-auto px-6 py-24 text-center">
+          <h2 className="text-4xl sm:text-5xl font-bold gradient-text mb-6">
+            Why Incident Commander?
+          </h2>
+          <p className="text-white/50 text-lg max-w-2xl mx-auto mb-16 leading-relaxed">
+            On-call teams need clear communication when things break. This tool gives you a live voice room,
+            an AI that listens and helps, and a full record of every decision — so nothing gets lost.
+          </p>
+          <div className="landing-card rounded-2xl p-8 border border-white/10 max-w-3xl mx-auto">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
+              {[
+                { value: '3.4x', label: 'Faster fixes' },
+                { value: '99.4%', label: 'Fact accuracy' },
+                { value: '<200ms', label: 'Voice delay' },
+                { value: '100%', label: 'Audit coverage' },
+              ].map((stat) => (
+                <div key={stat.label}>
+                  <div className="text-2xl sm:text-3xl font-bold text-[#33d1ff] mb-1">{stat.value}</div>
+                  <div className="text-xs text-white/40">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Use cases ── */}
+        <section className="max-w-7xl mx-auto px-6 py-24">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 mb-12">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-white/40 mb-3">Use cases</p>
+              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">
+                Built for real incidents
+              </h2>
+            </div>
+            <Link href="/incidents" className="btn-landing-outline shrink-0">
+              View All
+              <ArrowBtn className="!bg-white" />
             </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {useCases.map((uc) => (
+              <div key={uc.title} className="landing-card landing-card-hover overflow-hidden group">
+                <div className={`h-48 bg-gradient-to-br ${uc.gradient} flex items-center justify-center`}>
+                  <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Radio className="w-8 h-8 text-white/60" />
+                  </div>
+                </div>
+                <div className="p-6">
+                  <h3 className="font-semibold text-lg mb-2">{uc.title}</h3>
+                  <p className="text-sm text-white/50 leading-relaxed">{uc.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── CTA ── */}
+        <section className="max-w-7xl mx-auto px-6 pb-24">
+          <div className="landing-card rounded-3xl p-10 sm:p-16 grid grid-cols-1 lg:grid-cols-2 gap-10 items-center overflow-hidden relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-950/20 to-cyan-950/20 pointer-events-none" />
+            <div className="relative z-10">
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
+                Get started in minutes
+              </h2>
+              <p className="text-white/50 text-lg mb-8 leading-relaxed">
+                Open the dashboard, start a new incident, and join the voice bridge. No credit card needed for local dev.
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <Link href="/incidents/new" className="btn-landing-primary">
+                  Try for Free
+                  <ArrowBtn />
+                </Link>
+                <Link href="/incidents" className="btn-landing-outline">
+                  Open Dashboard
+                </Link>
+              </div>
+            </div>
+            <div className="relative z-10 flex justify-center">
+              <div className="w-full max-w-sm landing-card p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-cyan-400 flex items-center justify-center">
+                    <Zap className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">Live incident room</p>
+                    <p className="text-xs text-white/40">4 engineers connected</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {['Checkout API down — SEV1', 'AI: Rollback suggested', 'Approval pending'].map((msg, i) => (
+                    <div key={msg} className={`text-xs px-3 py-2 rounded-lg ${i === 0 ? 'bg-red-500/10 text-red-300' : i === 1 ? 'bg-purple-500/10 text-purple-300' : 'bg-yellow-500/10 text-yellow-300'}`}>
+                      {msg}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       </main>
 
-      {/* Industrial Machine Footer */}
-      <footer className="mt-16 border-t border-black/5 dark:border-white/10 py-8 px-6 text-center text-xs font-mono text-[#4a5568] dark:text-[#94a3b8]">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 led-glow-green" />
-            <span>AI INCIDENT COMMANDER // SPEC: INDUSTRIAL REALISM 2026</span>
+      <div id="support">
+        <LandingFooter />
+      </div>
+
+      {/* Cookie banner */}
+      {!cookieAccepted && (
+        <div className="fixed bottom-6 left-6 z-50 max-w-xs landing-card p-5 shadow-2xl animate-fade-up">
+          <p className="text-sm text-white/70 leading-relaxed mb-4">
+            We use cookies to improve your experience. By continuing, you agree to our use of cookies.
+          </p>
+          <div className="flex items-center gap-4">
+            <button className="text-xs text-white/50 underline hover:text-white/80">
+              Tell me how to opt out
+            </button>
+            <button
+              onClick={() => setCookieAccepted(true)}
+              className="ml-auto bg-[#33d1ff] text-black text-sm font-semibold px-4 py-2 rounded-full hover:bg-[#33d1ff]/90 transition-colors"
+            >
+              I Accept
+            </button>
           </div>
-          <div>POWERED BY NEXT.JS 16 // AGORA VOICE // DEEPGRAM // PRISMA</div>
         </div>
-      </footer>
+      )}
     </div>
   );
 }

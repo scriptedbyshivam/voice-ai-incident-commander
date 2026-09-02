@@ -18,8 +18,8 @@ const fontMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Incident Commander — Industrial Operations Bridge",
-  description: "Real-time Voice AI Incident Command & Operational Intelligence with Tactile Hardware Precision",
+  title: "Incident Commander — Voice AI for Outage Response",
+  description: "Run live voice bridges during outages with real-time AI analysis, team approvals, and full audit timelines.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${fontSans.variable} ${fontMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col font-sans bg-[var(--background)] text-[var(--foreground)] transition-colors duration-300">
+      <body className="min-h-full flex flex-col font-sans bg-black text-white antialiased">
         <ThemeProvider>
           {children}
         </ThemeProvider>

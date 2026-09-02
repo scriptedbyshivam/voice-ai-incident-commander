@@ -3,9 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
-import { useTheme } from '@/components/ThemeProvider';
-import ThemeToggle from '@/components/ThemeToggle';
-import { Zap, Plus, ArrowRight, Activity, AlertCircle, Clock, ShieldAlert, Radio, AlertTriangle } from 'lucide-react';
+import { Plus, ArrowRight, Clock, AlertTriangle } from 'lucide-react';
+import AppHeader from '@/components/landing/AppHeader';
 
 interface Incident {
   id: string;
@@ -16,8 +15,21 @@ interface Incident {
   createdAt: string;
 }
 
+function SevBadge({ severity }: { severity: Incident['severity'] }) {
+  const cls = {
+    SEV1: 'badge-sev1',
+    SEV2: 'badge-sev2',
+    SEV3: 'badge-sev3',
+    SEV4: 'badge-sev4',
+  }[severity];
+  return (
+    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${cls}`}>
+      {severity}
+    </span>
+  );
+}
+
 export default function IncidentsList() {
-  const { isDark } = useTheme();
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,22 +41,21 @@ export default function IncidentsList() {
         if (!res.ok) throw new Error('Failed to fetch incidents');
         const data = await res.json();
         setIncidents(data);
-      } catch (err: any) {
-        setError(err.message);
-        // Fallback simulated incidents for offline development
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Failed to load');
         setIncidents([
           {
             id: 'payment-api-outage-mock-id',
             title: 'Payment Gateway API Outage',
-            description: 'Spike in checkout and credit card processing failure rates across EU-Central cluster.',
+            description: 'Checkout failure rate is high across the EU cluster.',
             severity: 'SEV1',
             status: 'ACTIVE',
             createdAt: new Date(Date.now() - 3600 * 1000).toISOString(),
           },
           {
             id: 'auth-latency-mock-id',
-            title: 'Cognito Authentication Latency Spike',
-            description: 'User authentication integration reports latency > 2.5s on OAuth login request handler.',
+            title: 'Authentication Latency Spike',
+            description: 'Login requests taking over 2.5 seconds to complete.',
             severity: 'SEV2',
             status: 'RESOLVED',
             createdAt: new Date(Date.now() - 86400 * 1000).toISOString(),
@@ -57,181 +68,111 @@ export default function IncidentsList() {
     fetchIncidents();
   }, []);
 
+  const activeCount = incidents.filter((i) => i.status === 'ACTIVE').length;
+  const resolvedCount = incidents.filter((i) => i.status === 'RESOLVED').length;
+
   return (
-    <div
-      className={`min-h-screen font-sans pb-16 transition-colors duration-300 flex flex-col ${
-        isDark ? 'bg-[#141720] text-[#f1f5f9]' : 'bg-[#e0e5ec] text-[#2d3436]'
-      }`}
-    >
-      {/* Industrial Machine Header */}
-      <header className="sticky top-0 z-40 px-6 py-4">
-        <div
-          className={`max-w-7xl mx-auto px-6 h-16 rounded-2xl flex items-center justify-between border transition-all duration-300 shadow-industrial-card ${
-            isDark ? 'bg-[#1b202c]/90 border-[#232a3a]' : 'bg-[#f0f2f5]/90 border-white/60'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <Link
-              href="/"
-              className="w-9 h-9 rounded-xl bg-[#ff4757] text-white flex items-center justify-center font-bold shadow-industrial-accent active:translate-y-0.5"
-            >
-              <Zap className="w-5 h-5 fill-white" />
-            </Link>
-            <div>
-              <span className="font-extrabold text-base tracking-tight font-sans embossed-text block leading-none">
-                Incident Control Center
-              </span>
-              <span className="text-[9px] font-mono text-[#4a5568] dark:text-[#94a3b8] uppercase font-bold">
-                TELEMETRY DISPATCH DECK
-              </span>
-            </div>
-          </div>
+    <div className="app-page font-sans flex flex-col">
+      <AppHeader
+        backHref="/"
+        backLabel="Home"
+        title="Incidents"
+        subtitle="Dashboard"
+        actions={
+          <Link
+            href="/incidents/new"
+            className="sm:hidden inline-flex items-center gap-1.5 bg-white text-black text-sm font-semibold px-4 py-2 rounded-full"
+          >
+            <Plus className="w-4 h-4" />
+            New
+          </Link>
+        }
+      />
 
-          <div className="flex items-center gap-3 sm:gap-4">
-            <Link
-              href="/incidents/new"
-              className="btn-mechanical-primary px-4 py-2 rounded-xl text-xs font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Declare Outage</span>
-            </Link>
-
-            <div className="h-6 w-1 rounded-full bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed" />
-
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-
-      {/* Main Operations Dashboard */}
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8 flex-1 w-full">
-        {/* Title Deck */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-black/5 dark:border-white/10 pb-6">
+      <main className="max-w-7xl mx-auto px-6 py-10 flex-1 w-full space-y-8">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-[#d1d9e6] dark:bg-[#0e1017] shadow-industrial-recessed text-[10px] font-mono font-bold text-slate-700 dark:text-slate-300 mb-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 led-glow-green animate-pulse" />
-              <span>LIVE INCIDENT REGISTRY // CLUSTER US-EAST</span>
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight embossed-text font-sans">
-              Operational Incidents
-            </h1>
-            <p className="mt-1 text-sm text-[#4a5568] dark:text-[#94a3b8] font-medium">
-              Real-time situational dashboard for live outages and resolved post-mortems.
+            <p className="text-xs uppercase tracking-widest text-white/40 mb-2">Live dashboard</p>
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">Your incidents</h1>
+            <p className="mt-2 text-white/50">
+              See all active and past outages in one place.
             </p>
           </div>
 
-          {/* Quick Metrics Cartridge */}
-          <div className="flex items-center gap-3">
-            <div className="px-4 py-2.5 rounded-xl bg-[#d1d9e6]/60 dark:bg-[#0e1017]/60 shadow-industrial-recessed font-mono text-center">
-              <div className="text-[9px] uppercase font-bold text-slate-500">ACTIVE</div>
-              <div className="text-lg font-black text-[#ff4757] mt-0.5">
-                {incidents.filter((i) => i.status === 'ACTIVE').length}
-              </div>
+          <div className="flex gap-3">
+            <div className="landing-card px-5 py-3 text-center">
+              <p className="text-xs text-white/40 mb-0.5">Active</p>
+              <p className="text-2xl font-bold text-[#33d1ff]">{activeCount}</p>
             </div>
-            <div className="px-4 py-2.5 rounded-xl bg-[#d1d9e6]/60 dark:bg-[#0e1017]/60 shadow-industrial-recessed font-mono text-center">
-              <div className="text-[9px] uppercase font-bold text-slate-500">RESOLVED</div>
-              <div className="text-lg font-black text-emerald-500 mt-0.5">
-                {incidents.filter((i) => i.status === 'RESOLVED').length}
-              </div>
+            <div className="landing-card px-5 py-3 text-center">
+              <p className="text-xs text-white/40 mb-0.5">Resolved</p>
+              <p className="text-2xl font-bold text-green-400">{resolvedCount}</p>
             </div>
           </div>
         </div>
 
         {error && (
-          <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-800/40 text-amber-300 text-xs font-mono flex items-center gap-3">
-            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Database offline fallback mode active. Showing simulated incident records.</span>
+          <div className="app-alert app-alert-warning">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+            <span>Database offline — showing sample data.</span>
           </div>
         )}
 
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 space-y-4">
-            <div className="w-10 h-10 border-4 border-[#ff4757] border-t-transparent rounded-full animate-spin" />
-            <span className="font-mono text-xs text-slate-500 uppercase tracking-widest font-bold">
-              POLLING INCIDENT BUS...
-            </span>
+          <div className="flex flex-col items-center justify-center py-24 gap-4">
+            <div className="w-8 h-8 border-2 border-[#33d1ff] border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-white/40">Loading incidents...</span>
+          </div>
+        ) : incidents.length === 0 ? (
+          <div className="landing-card p-12 text-center space-y-4">
+            <p className="text-white/50">No incidents yet.</p>
+            <Link href="/incidents/new" className="btn-landing-primary inline-flex">
+              Start your first incident
+            </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5">
-            {incidents.map((incident) => {
-              const isSev1 = incident.severity === 'SEV1';
-              const isSev2 = incident.severity === 'SEV2';
-              const isActive = incident.status === 'ACTIVE';
-
-              return (
-                <motion.div
-                  key={incident.id}
-                  whileHover={{ y: -3 }}
-                  transition={{ duration: 0.18 }}
+          <div className="space-y-4">
+            {incidents.map((incident) => (
+              <motion.div key={incident.id} whileHover={{ y: -2 }} transition={{ duration: 0.15 }}>
+                <Link
+                  href={`/incidents/${incident.id}`}
+                  className="landing-card landing-card-hover p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 group block"
                 >
-                  <Link
-                    href={`/incidents/${incident.id}`}
-                    className={`p-6 sm:p-7 rounded-3xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 group block shadow-industrial-card hover:shadow-industrial-floating corner-screws ${
-                      isDark
-                        ? 'bg-[#1b202c] border-[#232a3a]'
-                        : 'bg-[#f0f2f5] border-white'
-                    }`}
-                  >
-                    <div className="space-y-3 max-w-3xl">
-                      {/* Hardware Badges Row */}
-                      <div className="flex flex-wrap items-center gap-2.5 font-mono text-xs">
-                        {/* Stamped SEV Metal Plate */}
-                        <span
-                          className={`px-3 py-1 rounded-lg text-xs font-extrabold uppercase tracking-wider ${
-                            isSev1
-                              ? 'bg-[#ff4757] text-white shadow-industrial-accent'
-                              : isSev2
-                              ? 'bg-amber-500 text-white shadow-md'
-                              : 'bg-[#d1d9e6] dark:bg-[#0e1017] text-slate-700 dark:text-slate-300 shadow-industrial-recessed'
-                          }`}
-                        >
-                          {incident.severity}
-                        </span>
-
-                        {/* Status Beacon */}
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                            isActive
-                              ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/60'
-                              : 'bg-slate-800 text-slate-400 border border-slate-700'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              isActive ? 'bg-emerald-400 led-glow-green animate-pulse' : 'bg-slate-500'
-                            }`}
-                          />
-                          {incident.status}
-                        </span>
-
-                        <span className="text-[11px] text-[#4a5568] dark:text-[#94a3b8] flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5" />
-                          {new Date(incident.createdAt).toLocaleDateString()} // {new Date(incident.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-
-                      {/* Incident Title */}
-                      <h3 className="text-xl sm:text-2xl font-bold font-sans tracking-tight group-hover:text-[#ff4757] transition-colors">
-                        {incident.title}
-                      </h3>
-
-                      {/* Incident Description */}
-                      <p className="text-sm text-[#4a5568] dark:text-[#94a3b8] leading-relaxed">
-                        {incident.description || 'No outage description provided.'}
-                      </p>
-                    </div>
-
-                    {/* Launch Hub Key */}
-                    <div className="shrink-0 flex items-center gap-2">
-                      <span className="btn-mechanical-chassis px-5 py-3 rounded-2xl font-mono text-xs font-bold uppercase tracking-wider group-hover:text-[#ff4757] flex items-center gap-2 border border-white/40 dark:border-white/5">
-                        <span>Command Hub</span>
-                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                  <div className="space-y-3 max-w-2xl">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <SevBadge severity={incident.severity} />
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          incident.status === 'ACTIVE' ? 'badge-active' : 'badge-resolved'
+                        }`}
+                      >
+                        {incident.status === 'ACTIVE' && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                        )}
+                        {incident.status}
+                      </span>
+                      <span className="text-xs text-white/40 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        {new Date(incident.createdAt).toLocaleDateString()}{' '}
+                        {new Date(incident.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
-                  </Link>
-                </motion.div>
-              );
-            })}
+
+                    <h3 className="text-xl font-semibold group-hover:text-[#33d1ff] transition-colors">
+                      {incident.title}
+                    </h3>
+                    <p className="text-sm text-white/50 leading-relaxed">
+                      {incident.description || 'No description provided.'}
+                    </p>
+                  </div>
+
+                  <span className="btn-landing-outline shrink-0 self-start sm:self-center text-sm">
+                    Open
+                    <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                  </span>
+                </Link>
+              </motion.div>
+            ))}
           </div>
         )}
       </main>
