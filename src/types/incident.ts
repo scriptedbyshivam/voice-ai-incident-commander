@@ -5,7 +5,10 @@ export type SourceType =
   | 'SLACK'
   | 'JIRA'
   | 'PAGERDUTY'
-  | 'MANUAL_CONFIRMATION';
+  | 'MANUAL_CONFIRMATION'
+  | 'APPROVAL'
+  | 'INTEGRATION'
+  | 'AUTO_DETECTED';
 
 export interface EvidenceMetadata {
   sourceType: SourceType;
@@ -124,14 +127,91 @@ export interface OpenQuestionSummary {
   updatedAt: string;
 }
 
+export interface AiUtteranceSummary {
+  id: string;
+  text: string;
+  trigger: string;
+  category: 'ALERT' | 'CONFIRMATION' | 'STATUS_SUMMARY';
+  audioUrl: string | null;
+  audioFormat: string | null;
+  durationSeconds: number | null;
+  ttsProvider: string | null;
+  createdAt: string;
+}
+
+export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+
+export interface ApprovalRequestSummary {
+  id: string;
+  actionId: string | null;
+  actionTitle: string;
+  actionDetails: string;
+  requestedBy: string;
+  status: ApprovalStatus;
+  approvedBy: string | null;
+  rejectedBy: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  expiresAt: string | null;
+  evidence: EvidenceMetadata | null;
+  createdAt: string;
+}
+
+export interface TimelineEvent {
+  id: string;
+  incidentId: string;
+  eventType: TimelineEventType;
+  description: string;
+  sourceType: SourceType;
+  sourceId: string | null;
+  speaker: string | null;
+  speakerRole: string | null;
+  confidence: number;
+  relatedEntity: string | null;
+  timestamp: string;
+  createdAt: string;
+}
+
 export interface TimelineEventSummary {
   id: string;
-  eventType: string; // e.g. "FACT", "DECISION", "ACTION_COMPLETED", "INCIDENT_CREATED"
+  eventType: string;
   description: string;
   eventTime: string;
   evidence: EvidenceMetadata;
   createdAt: string;
+  sourceType: string;
+  sourceId: string | null;
+  speaker: string | null;
+  confidence: number;
+  relatedEntity: string | null;
 }
+
+export type TimelineEventType =
+  | 'ALERT'
+  | 'OBSERVATION'
+  | 'FACT'
+  | 'HYPOTHESIS'
+  | 'CONFLICT'
+  | 'DECISION'
+  | 'ACTION_CREATED'
+  | 'ACTION_UPDATED'
+  | 'APPROVAL_REQUESTED'
+  | 'APPROVAL_GRANTED'
+  | 'APPROVAL_REJECTED'
+  | 'INTEGRATION_EVENT'
+  | 'STATUS_CHANGE'
+  | 'RESOLUTION'
+  | 'FACT_VERIFIED'
+  | 'HYPOTHESIS_VERIFIED'
+  | 'CONFLICT_RESOLVED'
+  | 'QUESTION_RESOLVED'
+  | 'ACTION_REASSIGNED'
+  | 'CRITICAL_ACTION_FLAGGED'
+  | 'PARTICIPANT_JOINED'
+  | 'PARTICIPANT_LEFT'
+  | 'INCIDENT_CREATED'
+  | 'FACT_SUPERSEDED'
+  | 'EVIDENCE_ADDED';
 
 export interface IncidentState {
   incidentId: string;
@@ -148,7 +228,8 @@ export interface IncidentState {
   actions: ActionItemSummary[];
   conflicts: ConflictSummary[];
   openQuestions: OpenQuestionSummary[];
-  unresolvedRisks: string[]; // List of titles/descriptions of risks extracted from questions/conflicts
+  unresolvedRisks: string[];
+  approvals: ApprovalRequestSummary[];
   timeline: TimelineEventSummary[];
   latestSummary?: string | null;
 }
