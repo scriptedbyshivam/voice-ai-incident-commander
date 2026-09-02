@@ -342,6 +342,126 @@ function escapeSSMLText(text: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TTS.ai provider — https://api.tts.ai/v1/
+//
+// REST synthesis (async job pattern):
+//   1. POST /v1/tts/            -> { uuid, status: "queued", ... }
+//   2. GET  /v1/speech/results/?uuid=<uuid>  -> poll until status "completed"
+//   3. GET  result_url          -> raw audio bytes
+//
+// Auth: Authorization: Bearer <TTSAI_API_KEY>
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TTSAI_BASE_URL = 'https://api.tts.ai/v1';
+export const TTSAI_DEFAULT_MODEL = 'kokoro';
+export const TTSAI_DEFAULT_VOICE = 'af_bella';
+// Free tier caps a single request at 5000 characters; stay well under it.
+const TTSAI_MAX_TEXT_LENGTH = 4500;
+const TTSAI_POLL_INTERVAL_MS = 1200;
+const TTSAI_MAX_POLLS = 60;
+
+export class TTSAITTSProvider implements TTSProvider {
+  readonly name = 'ttsai';
+
+  private apiKey: string;
+  private model: string;
+  private voice: string;
+
+  constructor() {
+    this.apiKey = process.env.TTSAI_API_KEY || '';
+    this.model = process.env.TTSAI_MODEL || TTSAI_DEFAULT_MODEL;
+    this.voice = process.env.TTSAI_VOICE || TTSAI_DEFAULT_VOICE;
+    if (!this.apiKey) {
+      console.warn('[TTS:TTSAI] TTSAI_API_KEY not configured. TTS.ai disabled.');
+    }
+  }
+
+  /** Public so the factory can resolve the usable provider. */
+  isUsable(): boolean {
+    return !!this.apiKey;
+  }
+
+  async synthesize(text: string, options?: SynthesizeOptions): Promise<AISynthesisResult> {
+    const trimmed = (text || '').trim();
+    if (trimmed.length === 0) {
+      throw new Error('Cannot synthesize empty text.');
+    }
+
+    if (!this.isUsable()) {
+      throw new Error('TTS.ai is not configured. Set TTSAI_API_KEY to enable.');
+    }
+
+    const payload = trimmed.slice(0, TTSAI_MAX_TEXT_LENGTH);
+
+    const submit = await fetch(`${TTSAI_BASE_URL}/tts/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: this.model,
+        text: payload,
+        voice: options?.voice || this.voice,
+        format: 'mp3',
+        speed: options?.speed ?? 1.0,
+      }),
+    });
+
+    if (!submit.ok) {
+      throw new Error(`TTS.ai submit failed: ${submit.status} ${submit.statusText}`);
+    }
+
+    const submitted = await submit.json().catch(() => null);
+    const jobUuid = submitted?.uuid;
+    if (!jobUuid) {
+      throw new Error('TTS.ai did not return a job uuid.');
+    }
+
+    // Poll for completion.
+    let audioResultUrl: string | null = null;
+    for (let attempt = 0; attempt < TTSAI_MAX_POLLS; attempt++) {
+      const res = await fetch(
+        `${TTSAI_BASE_URL}/speech/results/?uuid=${encodeURIComponent(jobUuid)}`,
+        {
+          headers: { Authorization: `Bearer ${this.apiKey}` },
+        }
+      );
+      if (!res.ok) {
+        throw new Error(`TTS.ai poll failed: ${res.status} ${res.statusText}`);
+      }
+      const result = await res.json().catch(() => null);
+      if (result?.status === 'completed' && result?.result_url) {
+        audioResultUrl = result.result_url;
+        break;
+      }
+      if (result?.status === 'failed') {
+        throw new Error(`TTS.ai generation failed: ${result?.error || 'unknown error'}`);
+      }
+      await new Promise((r) => setTimeout(r, TTSAI_POLL_INTERVAL_MS));
+    }
+
+    if (!audioResultUrl) {
+      throw new Error('TTS.ai generation timed out.');
+    }
+
+    const audioRes = await fetch(audioResultUrl);
+    if (!audioRes.ok) {
+      throw new Error(`TTS.ai download failed: ${audioRes.status} ${audioRes.statusText}`);
+    }
+    const audioBytes = Buffer.from(await audioRes.arrayBuffer());
+
+    return {
+      text: payload,
+      audioContent: audioBytes.toString('base64'),
+      format: 'mp3',
+      mimeType: 'audio/mpeg',
+      durationSeconds: estimateDuration(payload),
+    };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Mock TTS provider — offline/sandbox fallback
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -368,17 +488,18 @@ export class MockTTSProvider implements TTSProvider {
 // Factory
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type TTSProviderName = 'openai' | 'elevenlabs' | 'deepgram' | 'edge' | 'mock';
+export type TTSProviderName = 'openai' | 'elevenlabs' | 'deepgram' | 'edge' | 'ttsai' | 'mock';
 
 /**
  * Creates the active TTS provider from configuration.
  *
  * Resolution order:
- *   1. TTS_PROVIDER env var (openai | elevenlabs | deepgram | edge | mock)
+ *   1. TTS_PROVIDER env var (openai | elevenlabs | deepgram | edge | ttsai | mock)
  *   2. openai when OPENAI_API_KEY is configured
  *   3. elevenlabs when ELEVENLABS_API_KEY is configured
- *   4. deepgram when DEEPGRAM_API_KEY is configured (and no other key)
- *   5. edge (keyless fallback) then mock
+ *   4. ttsai when TTSAI_API_KEY is configured
+ *   5. deepgram when DEEPGRAM_API_KEY is configured (and no other key)
+ *   6. edge (keyless fallback) then mock
  */
 export function createTTSProvider(): TTSProvider {
   const requested = (process.env.TTS_PROVIDER || 'openai').toLowerCase();
@@ -405,12 +526,22 @@ export function createTTSProvider(): TTSProvider {
     return new MockTTSProvider();
   }
 
-  // default: openai first, then elevenlabs, then deepgram, then edge, then mock
+  if (requested === 'ttsai') {
+    const provider = new TTSAITTSProvider();
+    if (provider.isUsable()) return provider;
+    console.warn('[TTS] TTS_PROVIDER=ttsai but TTSAI_API_KEY missing. Falling back to mock.');
+    return new MockTTSProvider();
+  }
+
+  // default: openai first, then elevenlabs, then ttsai, then deepgram, then edge, then mock
   const openAi = new OpenAITTSProvider();
   if (openAi.isUsable()) return openAi;
 
   const elevenLabs = new ElevenLabsTTSProvider();
   if (elevenLabs.isUsable()) return elevenLabs;
+
+  const ttsai = new TTSAITTSProvider();
+  if (ttsai.isUsable()) return ttsai;
 
   const deepgram = new DeepgramTTSProvider();
   if (deepgram.isUsable()) return deepgram;
