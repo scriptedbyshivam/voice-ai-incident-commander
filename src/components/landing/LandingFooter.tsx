@@ -64,13 +64,13 @@ export default function LandingFooter() {
         </div>
 
         <div className="pt-8 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/40">
-          <span className="text-[#33d1ff] font-semibold lowercase">commander</span>
+          <span className="text-[#33d1ff] font-black lowercase text-sm">agora voicebridge</span>
           <div className="flex flex-wrap justify-center gap-4">
             <Link href="#" className="hover:text-white/70">Terms of Service</Link>
             <Link href="#" className="hover:text-white/70">Privacy Policy</Link>
             <Link href="#" className="hover:text-white/70">Acceptable Use</Link>
           </div>
-          <span>Powered by Agora · Next.js · OpenAI</span>
+          <span>Powered by Agora RTC · Next.js · OpenAI</span>
         </div>
       </div>
     </footer>
