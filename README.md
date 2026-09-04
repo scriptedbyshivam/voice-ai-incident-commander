@@ -94,3 +94,64 @@ The following scripts are configured in `package.json`:
 - **Incident Scenarios & Fixtures**: Pre-built templates for payment outages, replica lag, and TLS expiry in `src/lib/fixtures.ts`.
 - **SLA & Health Metrics**: Triage velocity score, MTTA, and risk calculation helpers in `src/lib/metrics.ts`.
 
+---
+
+## Free Deployment (Vercel + Neon — no credit card)
+
+The app is production-ready for **free tiers**. It uses the official Agora Conversational AI setup (`agora-agents` + `agora-agent-client-toolkit`) with a reseller STT/LLM/TTS pipeline billed to the Agora project, a free cloud LLM for `/analyze`, and browser Web Speech for transcription — so **no separate STT server or paid LLM wallet is required**.
+
+### What to create (all free, no card)
+
+| Service | Purpose | Free tier |
+|---|---|---|
+| **Vercel** (vercel.com) | Hosts the Next.js web app + API routes | Hobby (free) |
+| **Neon** (neon.tech) or **Supabase** | Postgres database | Free (512MB–1GB) |
+| **Agora** (console.agora.io) | App ID + Certificate for the AI voice agent | Free signup credits |
+| **Groq** (console.groq.com) or **Google Gemini** | Free cloud LLM for facts/hypotheses/decisions/actions | Free API key |
+
+### Step 1 — Database (Neon)
+1. Create a Neon project → copy the **connection string** (`postgresql://...?sslmode=require`).
+2. Later, after deploying, push the schema: `npx prisma migrate deploy` (or `npx prisma db push`) pointing at the Neon `DATABASE_URL`.
+
+### Step 2 — Agora (for the AI Incident Commander voice agent)
+1. Agora Console → create/find a project: note the **App ID** and enable **App Certificate**.
+2. Your project needs the **Conversational AI / real-time fabric** feature and an active billing/credit to run the cloud agent (STT/LLM/TTS bills to the Agora project).
+3. Set `AGORA_AREA` (`us` / `eu` / `ap`) and `AGORA_AGENT_UID` (`123456` default).
+
+### Step 3 — Free LLM (for `/analyze`)
+- **Groq**: sign up at console.groq.com → create an API key.
+  - `CLOUD_LLM_BASE_URL=https://api.groq.com/openai/v1`
+  - `CLOUD_LLM_MODEL=llama-3.3-70b-versatile`
+- Or **Google Gemini**: AI Studio → API key.
+  - `CLOUD_LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/`
+  - `CLOUD_LLM_MODEL=gemini-2.0-flash`
+
+### Step 4 — Deploy on Vercel
+1. Push this repo to GitHub.
+2. In Vercel: **Add New → Project → Import** the repo. Vercel auto-detects Next.js and runs `prisma generate && next build` (see `vercel.json`).
+3. Add these **Environment Variables** (Project → Settings → Environment Variables):
+   ```
+   DATABASE_URL           = <your Neon connection string>
+   AGORA_APP_ID           = <Agora App ID>
+   AGORA_APP_CERTIFICATE  = <Agora App Certificate>   (server-side only)
+   AGORA_AREA             = us
+   AGORA_AGENT_UID        = 123456
+   CLOUD_LLM_API_KEY      = <Groq or Gemini key>
+   CLOUD_LLM_BASE_URL     = https://api.groq.com/openai/v1
+   CLOUD_LLM_MODEL        = llama-3.3-70b-versatile
+   NEXT_PUBLIC_BASE_URL   = <https://your-app.vercel.app>
+   TTS_PROVIDER           = edge            (keyless, free AI speaker)
+   ```
+4. **Deploy**, then in your terminal run once:
+   ```bash
+   DATABASE_URL="<your Neon URL>" npx prisma db push
+   DATABASE_URL="<your Neon URL>" npx prisma db seed   # optional sample incident
+   ```
+5. Open the deployed URL, join the room, and press **AI Incident Commander Assistant**.
+
+### Deployment notes / no-cost choices
+- **Transcription**: with no `TRANSCRIPTION_WS_URL`, the app auto-uses the browser's **Web Speech API** (free, no server). To keep the standalone WS STT server, deploy it separately (e.g. Render/Railway) and set `TRANSCRIPTION_WS_URL`.
+- **AI voice (TTS)**: the cloud agent speaks via Agora-billed reseller TTS; the local speaker can use `TTS_PROVIDER=edge` (keyless) or `ttsai`.
+- **Ollama**: leave `OLLAMA_BASE_URL` unset in production — it only runs locally.
+
+
