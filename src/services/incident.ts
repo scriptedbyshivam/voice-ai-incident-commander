@@ -7,7 +7,6 @@ import {
 } from '@/types/incident';
 import { aiProvider } from './ai';
 import { incidentStateAggregationService } from './aggregation';
-import { aiSpeakerService } from './aiSpeaker';
 
 export class IncidentService {
   async createIncident(
@@ -124,7 +123,9 @@ export class IncidentService {
     });
 
     // AI spoken participation — the commander begins its cadence updates.
-    aiSpeakerService.startPeriodicStatus(incident.id);
+    // NOTE: Periodic auto-speech is disabled — the AI speaks only when a
+    // human explicitly requests it (Speak button / status request / prompt).
+    // aiSpeakerService.startPeriodicStatus(incident.id);
 
     return incident;
   }
@@ -142,16 +143,19 @@ export class IncidentService {
     });
 
     // Keep the AI's cadence status updates alive for ACTIVE incidents only.
-    if (updated.status === 'RESOLVED' || updated.status === 'CLOSED') {
-      aiSpeakerService.stopPeriodicStatus(updated.id);
-    } else if (updated.status === 'ACTIVE') {
-      aiSpeakerService.startPeriodicStatus(updated.id);
-    }
+    // NOTE: Periodic auto-speech is disabled — the AI speaks only when a
+    // human explicitly requests it.
+    // if (updated.status === 'RESOLVED' || updated.status === 'CLOSED') {
+    //   aiSpeakerService.stopPeriodicStatus(updated.id);
+    // } else if (updated.status === 'ACTIVE') {
+    //   aiSpeakerService.startPeriodicStatus(updated.id);
+    // }
 
     // AI spoken participation — significant state change (status/severity).
-    aiSpeakerService
-      .evaluateAndSpeak(updated.id)
-      .catch((err) => console.warn('[IncidentService] AI speak evaluation failed:', err.message));
+    // Disabled to prevent unprompted speech; the AI only speaks on request.
+    // aiSpeakerService
+    //   .evaluateAndSpeak(updated.id)
+    //   .catch((err) => console.warn('[IncidentService] AI speak evaluation failed:', err.message));
 
     return updated;
   }
