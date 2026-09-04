@@ -4,7 +4,6 @@ import { incidentStateAggregationService } from './aggregation';
 import { incidentStateTransitionLayer } from './stateTransition';
 import { AnalysisResult, NormalizedExtraction } from './ai-schema';
 import { realtimeEventHub } from './eventHub';
-import { aiSpeakerService } from './aiSpeaker';
 import { AnalysisRunSummary } from '@/types/events';
 
 /**
@@ -110,7 +109,7 @@ export class IncidentAnalysisEngine {
         incidentId: input.incidentId,
         transcriptId,
         transcriptText,
-        model: process.env.OLLAMA_MODEL || 'llama3.1',
+        model: `${aiProvider.getModelInfo().provider} / ${aiProvider.getModelInfo().model}`,
         extractedCounts: {
           facts: analysis.facts.length,
           observations: analysis.observations.length,
@@ -132,11 +131,12 @@ export class IncidentAnalysisEngine {
       }
       realtimeEventHub.emit('analysis.completed', { incidentId: input.incidentId, summary });
 
-      // 8. AI spoken participation — speak only when a real trigger fired.
-      //    (conflict detected, decision/action persisted, etc.)
-      aiSpeakerService
-        .evaluateAndSpeak(input.incidentId)
-        .catch((err) => console.warn('[AnalysisEngine] AI speak evaluation failed:', err.message));
+      // 8. AI spoken participation — disabled to prevent the AI speaking
+      //    unprompted after every analysis. The AI only speaks on explicit
+      //    human request (Speak button / status request / prompt).
+      // aiSpeakerService
+      //   .evaluateAndSpeak(input.incidentId)
+      //   .catch((err) => console.warn('[AnalysisEngine] AI speak evaluation failed:', err.message));
 
       return { runId, incidentId: input.incidentId, ok: true, summary };
     } catch (error: any) {
