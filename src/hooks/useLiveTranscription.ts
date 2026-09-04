@@ -24,7 +24,20 @@ export interface UseLiveTranscriptionOptions {
   enabled?: boolean;
 }
 
-const WS_URL = process.env.TRANSCRIPTION_WS_URL || 'ws://localhost:3001';
+const WS_URL = process.env.TRANSCRIPTION_WS_URL || '';
+
+// The WebSocket STT server only runs locally (port 3001). In a serverless
+// deployment (Vercel/etc.) there is no long-lived WS server, so we fall back to
+// the browser's built-in Web Speech API (free, no extra service). Returns true
+// only when a non-local WS endpoint is actually configured.
+function isWsServerConfigured(): boolean {
+  if (!process.env.TRANSCRIPTION_WS_URL) return false;
+  const url = WS_URL;
+  if (!url) return false;
+  // Reject localhost / loopback endpoints when deploying to the cloud.
+  if (/localhost|127\.0\.0\.1|0\.0\.0\.0|::1/i.test(url)) return false;
+  return /^wss?:\/\//i.test(url);
+}
 
 export function useLiveTranscription({
   incidentId,
@@ -43,11 +56,10 @@ export function useLiveTranscription({
   const sendTranscriptToBackend = useCallback(async (text: string, isFinal: boolean) => {
     if (!incidentId || !text.trim() || !isFinal) return;
     try {
-      await fetch(`/api/incidents/${incidentId}/ai`, {
+      await fetch(`/api/incidents/${incidentId}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'analyze_segment',
           transcript: text,
           speakerName: userName,
           speakerRole: userRole,
@@ -156,105 +168,126 @@ export function useLiveTranscription({
 
     setStatus({ status: 'connecting', message: 'Requesting microphone access...' });
 
-    try {
-      // 1. Get microphone
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
-      if (stream) streamRef.current = stream;
+    // 1. Try to get microphone — may fail when Agora RTC already holds it.
+    //    Mic failure must NOT block the WebSocket or Web Speech fallback paths.
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => null);
+    if (stream) streamRef.current = stream;
 
-      // 2. Connect WebSocket to transcription server if available
+    // 2. Try the WebSocket transcription server (Deepgram STT) — LOCAL ONLY.
+    //    In production (no WS server configured) skip straight to Web Speech
+    //    so the UI isn't stuck for the 4s connection timeout.
+    let wsConnected = false;
+    if (isWsServerConfigured()) {
+    try {
       const params = new URLSearchParams({ incidentId, userName, userRole });
       const ws = new WebSocket(`${WS_URL}?${params.toString()}`);
       wsRef.current = ws;
 
-      ws.onopen = () => {
-        setStatus({ status: 'connected', message: 'Connected to transcription server' });
-        if (stream) {
-          const audioContext = new AudioContext({ sampleRate: 16000 });
-          audioContextRef.current = audioContext;
-          const source = audioContext.createMediaStreamSource(stream);
-          const processor = audioContext.createScriptProcessor(4096, 1, 1);
-          processorRef.current = processor;
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => resolve(), 4000);
 
-          processor.onaudioprocess = (e) => {
-            if (ws.readyState !== WebSocket.OPEN) return;
-            const inputData = e.inputBuffer.getChannelData(0);
-            const sampleRate = audioContext.sampleRate;
-            let audioData: Float32Array;
+        ws.onopen = () => {
+          clearTimeout(timeout);
+          wsConnected = true;
+          setStatus({ status: 'connected', message: 'Connected to transcription server' });
 
-            if (sampleRate !== 16000) {
-              const ratio = 16000 / sampleRate;
-              const newLength = Math.round(inputData.length * ratio);
-              audioData = new Float32Array(newLength);
-              for (let i = 0; i < newLength; i++) {
-                const srcIndex = i / ratio;
-                const index = Math.floor(srcIndex);
-                const frac = srcIndex - index;
-                audioData[i] = index + 1 < inputData.length
-                  ? inputData[index] * (1 - frac) + inputData[index + 1] * frac
-                  : inputData[index] || 0;
+          // Pipe mic audio to the STT server when mic is available.
+          if (stream) {
+            const audioContext = new AudioContext({ sampleRate: 16000 });
+            audioContextRef.current = audioContext;
+            const source = audioContext.createMediaStreamSource(stream);
+            const processor = audioContext.createScriptProcessor(4096, 1, 1);
+            processorRef.current = processor;
+
+            processor.onaudioprocess = (e) => {
+              if (ws.readyState !== WebSocket.OPEN) return;
+              const inputData = e.inputBuffer.getChannelData(0);
+              const sampleRate = audioContext.sampleRate;
+              let audioData: Float32Array;
+
+              if (sampleRate !== 16000) {
+                const ratio = 16000 / sampleRate;
+                const newLength = Math.round(inputData.length * ratio);
+                audioData = new Float32Array(newLength);
+                for (let i = 0; i < newLength; i++) {
+                  const srcIndex = i / ratio;
+                  const index = Math.floor(srcIndex);
+                  const frac = srcIndex - index;
+                  audioData[i] = index + 1 < inputData.length
+                    ? inputData[index] * (1 - frac) + inputData[index + 1] * frac
+                    : inputData[index] || 0;
+                }
+              } else {
+                audioData = inputData;
               }
-            } else {
-              audioData = inputData;
-            }
 
-            const int16 = new Int16Array(audioData.length);
-            for (let i = 0; i < audioData.length; i++) {
-              const s = Math.max(-1, Math.min(1, audioData[i]));
-              int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-            }
-            ws.send(int16.buffer);
-          };
-
-          source.connect(processor);
-          processor.connect(audioContext.destination);
-        }
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'transcript.partial' || msg.type === 'transcript.final') {
-            const t = msg.transcript;
-            if (!t) return;
-
-            const segment: LiveTranscriptSegment = {
-              id: t.id || `seg-${Date.now()}`,
-              speaker: t.speakerName || userName,
-              speakerName: t.speakerName || userName,
-              role: t.speakerRole || userRole,
-              text: t.text,
-              timestamp: t.timestamp || new Date().toISOString(),
-              isFinal: msg.type === 'transcript.final',
+              const int16 = new Int16Array(audioData.length);
+              for (let i = 0; i < audioData.length; i++) {
+                const s = Math.max(-1, Math.min(1, audioData[i]));
+                int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+              }
+              ws.send(int16.buffer);
             };
 
-            setSegments((prev) => {
-              if (segment.isFinal) {
-                sendTranscriptToBackend(segment.text, true);
-                const filtered = prev.filter(
-                  (s) => !(s.speaker === segment.speaker && !s.isFinal && segment.text.startsWith(s.text))
-                );
-                return [...filtered, segment];
-              }
-              const existingIdx = prev.findIndex((s) => s.id === segment.id);
-              if (existingIdx >= 0) {
-                const updated = [...prev];
-                updated[existingIdx] = segment;
-                return updated;
-              }
-              return [...prev, segment];
-            });
+            source.connect(processor);
           }
-        } catch {}
-      };
+          resolve();
+        };
 
-      ws.onerror = () => {
-        startWebSpeechFallback();
-      };
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'transcript.partial' || msg.type === 'transcript.final') {
+              const t = msg.transcript;
+              if (!t) return;
 
-      ws.onclose = () => {
-        startWebSpeechFallback();
-      };
+              const segment: LiveTranscriptSegment = {
+                id: t.id || `seg-${Date.now()}`,
+                speaker: t.speakerName || userName,
+                speakerName: t.speakerName || userName,
+                role: t.speakerRole || userRole,
+                text: t.text,
+                timestamp: t.timestamp || new Date().toISOString(),
+                isFinal: msg.type === 'transcript.final',
+              };
+
+              setSegments((prev) => {
+                if (segment.isFinal) {
+                  sendTranscriptToBackend(segment.text, true);
+                  const filtered = prev.filter(
+                    (s) => !(s.speaker === segment.speaker && !s.isFinal && segment.text.startsWith(s.text))
+                  );
+                  return [...filtered, segment];
+                }
+                const existingIdx = prev.findIndex((s) => s.id === segment.id);
+                if (existingIdx >= 0) {
+                  const updated = [...prev];
+                  updated[existingIdx] = segment;
+                  return updated;
+                }
+                return [...prev, segment];
+              });
+            }
+          } catch {}
+        };
+
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+
+        ws.onclose = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+      });
     } catch {
+      // WebSocket setup failed — will fall back below.
+    }
+    }
+
+    // 3. If the STT server is unreachable, use the browser's built-in Web Speech API.
+    if (!wsConnected) {
       startWebSpeechFallback();
     }
   }, [incidentId, userName, userRole, enabled, sendTranscriptToBackend, startWebSpeechFallback]);
