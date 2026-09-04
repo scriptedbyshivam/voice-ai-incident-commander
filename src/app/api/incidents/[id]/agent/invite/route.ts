@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { AgoraClient, Agent, DeepgramSTT, DeepgramTTS, ExpiresIn, OpenAI } from 'agora-agents';
+import { AgoraClient, Agent, DeepgramSTT, ExpiresIn, MiniMaxTTS, OpenAI } from 'agora-agents';
 import { agoraService, AGORA_AGENT_UID, agoraAreaToAgentsArea } from '@/services/agora';
 import { incidentStateAggregationService } from '@/services/aggregation';
 
@@ -77,11 +77,15 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       appCertificate: agoraService.appCertificate,
     });
 
-    // Pipeline: Agora-managed reseller STT (Deepgram) → LLM (OpenAI) → TTS (Deepgram Aura).
-    // No vendor API keys required for STT/LLM — billed via Agora project.
+    // Pipeline: Agora-managed reseller STT (Deepgram) → LLM (OpenAI) → TTS (MiniMax).
+    // No vendor API keys required — the whole STT/LLM/TTS pipeline is billed via the
+    // Agora project (same as the official quickstart template), so no extra keys/wallets.
     const agent = new Agent({
       client,
       instructions: commanderPrompt(context),
+      greeting: greeting,
+      failureMessage: 'Signal interrupted, one moment.',
+      maxHistory: 50,
       turnDetection: {
         config: {
           speech_threshold: 0.5,
@@ -101,7 +105,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         },
       },
       // RTM must be enabled so the browser can receive transcript + state events.
-      advancedFeatures: { enable_rtm: true, enable_tools: false },
+      advancedFeatures: { enable_rtm: true, enable_tools: true },
       parameters: {
         audio_scenario: 'chorus',
         data_channel: 'rtm',
@@ -123,10 +127,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           },
         })
       )
+      // TTS in reseller mode (no vendor API key) → billed via the Agora project,
+      // matching the official quickstart template's MiniMax preset.
       .withTts(
-        new DeepgramTTS({
-          apiKey: process.env.DEEPGRAM_API_KEY || '',
-          model: 'aura-2-thalia-en',
+        new MiniMaxTTS({
+          model: 'speech_2_6_turbo',
+          voiceId: 'English_captivating_female1',
         })
       );
 
