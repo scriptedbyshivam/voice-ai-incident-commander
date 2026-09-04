@@ -89,7 +89,6 @@ function ArrowBtn({ className = '' }: { className?: string }) {
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('voice');
-  const [cookieAccepted, setCookieAccepted] = useState(false);
 
   return (
     <div className="landing-bg min-h-screen font-sans">
@@ -536,26 +535,6 @@ await bridge.join({ role: "commander" });`}</code>
       <div id="support">
         <LandingFooter />
       </div>
-
-      {/* Cookie banner */}
-      {!cookieAccepted && (
-        <div className="fixed bottom-6 left-6 z-50 max-w-xs landing-card p-5 shadow-2xl animate-fade-up">
-          <p className="text-sm text-white/70 leading-relaxed mb-4">
-            We use cookies to improve your experience. By continuing, you agree to our use of cookies.
-          </p>
-          <div className="flex items-center gap-4">
-            <button className="text-xs text-white/50 underline hover:text-white/80">
-              Tell me how to opt out
-            </button>
-            <button
-              onClick={() => setCookieAccepted(true)}
-              className="ml-auto bg-[#33d1ff] text-black text-sm font-semibold px-4 py-2 rounded-full hover:bg-[#33d1ff]/90 transition-colors"
-            >
-              I Accept
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
