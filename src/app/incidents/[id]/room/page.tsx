@@ -82,7 +82,7 @@ export default function VoiceRoom({ params }: PageProps) {
   }, [loadIncidentData]);
 
   const agoraClientRef = useRef<{ leave: () => Promise<void> } | null>(null);
-  const localAudioTrackRef = useRef<{ close: () => void; setEnabled: (v: boolean) => void } | null>(null);
+  const localAudioTrackRef = useRef<{ close: () => void; setMuted: (muted: boolean) => Promise<void> } | null>(null);
   const aiVoiceRef = useRef<AIVoiceParticipantHandle | null>(null);
 
   const aiParticipant = useAISpeaker({
@@ -104,18 +104,25 @@ export default function VoiceRoom({ params }: PageProps) {
   });
 
   const commander = useCommanderAgent();
-  const tokenDataRef = useRef<{ mock?: boolean; appId?: string; channelName?: string; token?: string; aiToken?: string; aiUid?: number; uid?: number; agentUid?: number } | null>(null);
+  const tokenDataRef = useRef<{ mock?: boolean; appId?: string; channelName?: string; token?: string; aiToken?: string; aiUid?: number; uid?: number | string; agentUid?: number; commanderRtmUid?: string; commanderRtmToken?: string } | null>(null);
   const [bridgeIsMock, setBridgeIsMock] = useState<boolean | null>(null);
   const [bridgeAgentUid, setBridgeAgentUid] = useState<number>(123456);
 
   const handleToggleCommander = useCallback(async () => {
     const td = tokenDataRef.current;
-    if (!td || td.mock || !agoraClientRef.current) return;
+    if (!td || td.mock) {
+      setErrorMsg('AI Commander requires a live Agora connection (not available in demo mode).');
+      return;
+    }
     if (commander.state === 'running' || commander.state === 'connecting') {
       await commander.disconnectAgent();
       return;
     }
     if (commander.state === 'ending') return;
+    if (!agoraClientRef.current) {
+      setErrorMsg('Voice channel not connected. Rejoin the room to enable AI Commander.');
+      return;
+    }
     try {
       await commander.connectAgent({
         incidentId,
@@ -125,11 +132,33 @@ export default function VoiceRoom({ params }: PageProps) {
         requesterUid: String(td.uid!),
         agentUid: typeof td.agentUid === 'number' ? td.agentUid : 123456,
         rtcClient: agoraClientRef.current,
+        rtmUid: td.commanderRtmUid || undefined,
+        rtmToken: td.commanderRtmToken || undefined,
+        aiVoiceUidToSkip: typeof td.aiUid === 'number' ? td.aiUid : AI_PARTICIPANT_UID,
       });
     } catch (err) {
       console.warn('[CommanderAgent] toggle failed:', err);
+      setErrorMsg('AI Commander failed to connect. Check server logs.');
     }
   }, [commander, incidentId]);
+
+  // Cleanup on unmount: release mic + leave Agora channel if user navigated away
+  useEffect(() => {
+    return () => {
+      if (localAudioTrackRef.current) {
+        try { localAudioTrackRef.current.close(); } catch {}
+        localAudioTrackRef.current = null;
+      }
+      if (agoraClientRef.current) {
+        agoraClientRef.current.leave().catch(() => {});
+        agoraClientRef.current = null;
+      }
+      if (aiVoiceRef.current) {
+        aiVoiceRef.current.dispose().catch(() => {});
+        aiVoiceRef.current = null;
+      }
+    };
+  }, []);
 
   const aiSegments: LiveTranscriptSegment[] = aiParticipant.utterances.map((u) => ({
     id: `ai-${u.id}`, speaker: AI_PARTICIPANT_NAME, speakerName: AI_PARTICIPANT_NAME,
@@ -143,6 +172,10 @@ export default function VoiceRoom({ params }: PageProps) {
     role: e.isAgent ? 'INCIDENT_COMMANDER' : userRole,
     text: e.text, timestamp: new Date(e.timestamp).toISOString(), isFinal: e.isFinal,
   }));
+
+  // Surface the Commander's own connection error (RTM/agent) to the user —
+  // otherwise `commander.state === 'error'` fails silently with no feedback.
+  const commanderError = commander.state === 'error' ? commander.error : null;
 
   const crtSegments: LiveTranscriptSegment[] = [...aiSegments, ...agentSegments, ...transcription.segments].slice(0, 50);
 
@@ -185,6 +218,7 @@ export default function VoiceRoom({ params }: PageProps) {
           await client.join(tokenData.appId, tokenData.channelName, tokenData.token, tokenData.uid);
           const micTrack = await AgoraRTC.createMicrophoneAudioTrack();
           localAudioTrackRef.current = micTrack;
+          if (isMuted) await micTrack.setMuted(true);
           await client.publish([micTrack]);
         }
       }
@@ -229,12 +263,15 @@ export default function VoiceRoom({ params }: PageProps) {
     setShowSummaryModal(true);
   }, [commander, loadIncidentData]);
 
-  const toggleMute = () => {
-    if (localAudioTrackRef.current) localAudioTrackRef.current.setEnabled(isMuted);
-    setIsMuted(!isMuted);
+  const toggleMute = async () => {
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
     setParticipants((prev) =>
-      prev.map((p) => (p.isLocal ? { ...p, isMuted: !isMuted } : p))
+      prev.map((p) => (p.isLocal ? { ...p, isMuted: nextMuted } : p))
     );
+    if (localAudioTrackRef.current) {
+      await localAudioTrackRef.current.setMuted(nextMuted).catch(() => {});
+    }
   };
 
   // Google Meet Pre-join Screen
@@ -371,6 +408,14 @@ export default function VoiceRoom({ params }: PageProps) {
           </div>
         </div>
       </header>
+
+      {/* Error Toast */}
+      {(errorMsg || commanderError) && (
+        <div className="mx-6 mb-2 flex items-center justify-between bg-red-500/20 border border-red-500/40 text-red-300 px-4 py-2 rounded-xl text-xs font-medium z-20">
+          <span>{errorMsg || commanderError}</span>
+          <button onClick={() => setErrorMsg(null)} className="ml-3 text-red-400 hover:text-red-200">&times;</button>
+        </div>
+      )}
 
       {/* Main Grid + Slide-in Sidebar Stage */}
       <div className="flex-1 flex overflow-hidden px-6 pb-20 relative">
@@ -537,7 +582,7 @@ export default function VoiceRoom({ params }: PageProps) {
         {/* AI Incident Commander Assistant */}
         <button
           onClick={handleToggleCommander}
-          disabled={bridgeIsMock || commander.state === 'ending'}
+          disabled={commander.state === 'ending' || commander.state === 'connecting'}
           className={`gmeet-btn-icon disabled:opacity-40 ${commander.state === 'running' ? 'gmeet-btn-[#8ab4f8] text-[#8ab4f8] border border-[#8ab4f8]' : ''}`}
           title="AI Incident Commander Assistant"
         >
