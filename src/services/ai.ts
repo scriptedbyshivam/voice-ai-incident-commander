@@ -23,6 +23,9 @@ export const AICriticalActionSchema = z.object({
 });
 
 export interface AIProvider {
+  /** Human-readable label of the provider/model actually in use (for diagnostics). */
+  getModelInfo(): { provider: string; model: string };
+
   analyzeTranscriptSegment(input: {
     transcript: string;
     speakerId?: string;
@@ -102,23 +105,160 @@ Rules for the output:
 - Do not fabricate facts; report only what the transcript and evidence support.`;
 
 export class OllamaProvider implements AIProvider {
-  private client: OpenAI | null = null;
+  // Cloud free-tier provider (OpenAI-compatible, e.g. Groq / Google Gemini
+  // OpenAI-compat endpoint). Reaches the app from any serverless host, so the
+  // analysis pipeline works in production WITHOUT a local Ollama. Configure via
+  // CLOUD_LLM_API_KEY / CLOUD_LLM_BASE_URL / CLOUD_LLM_MODEL.
+  private cloudClient: OpenAI | null = null;
+  private cloudModel = 'llama-3.3-70b-versatile';
+  private cloudName = 'CloudLLM';
+  // Primary provider (OpenAI-compatible remote, e.g. a router).
+  private primaryClient: OpenAI | null = null;
+  private primaryModel = 'gpt-4o-mini';
+  private primaryName = 'OpenAI';
+  // Fallback provider (local Ollama). Used only in local dev; absent in the cloud.
+  private fallbackClient: OpenAI | null = null;
+  private fallbackModel: string;
+  private providerName: string;
   private model: string;
 
   constructor() {
-    const baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1';
-    this.model = process.env.OLLAMA_MODEL || 'llama3.1';
+    const cloudKey = process.env.CLOUD_LLM_API_KEY || '';
+    const cloudBaseUrl = process.env.CLOUD_LLM_BASE_URL || 'https://api.groq.com/openai/v1';
+    const openaiKey = process.env.OPENAI_API_KEY || '';
+    const openaiBaseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+    const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434/v1';
 
-    // Ollama does not require an API key, but the OpenAI SDK requires one.
-    // We pass a dummy key; Ollama ignores it.
-    this.client = new OpenAI({
-      baseURL: baseUrl,
-      apiKey: 'ollama',
-    });
+    // Free cloud LLM (highest priority) — works in production/serverless.
+    if (cloudKey && cloudKey !== 'placeholder_cloud_llm_key') {
+      this.cloudClient = new OpenAI({ baseURL: cloudBaseUrl, apiKey: cloudKey });
+      this.cloudModel = process.env.CLOUD_LLM_MODEL || this.cloudModel;
+      this.cloudName = process.env.CLOUD_LLM_NAME || 'CloudLLM';
+      this.providerName = this.cloudName;
+      this.model = this.cloudModel;
+      this.fallbackModel = process.env.OLLAMA_MODEL || 'llama3.1';
+      console.log(`[AI] Using free cloud LLM (${this.cloudName}, model: ${this.model})`);
+      if (process.env.OLLAMA_BASE_URL) {
+        this.fallbackClient = new OpenAI({ baseURL: ollamaBaseUrl, apiKey: 'ollama' });
+      }
+      return;
+    }
+
+    this.fallbackModel = process.env.OLLAMA_MODEL || 'llama3.1';
+    this.fallbackClient = new OpenAI({ baseURL: ollamaBaseUrl, apiKey: 'ollama' });
+    console.log('[AI] Ollama fallback armed (model: ' + this.fallbackModel + ')');
+
+    if (openaiKey && openaiKey !== 'placeholder_openai_key') {
+      this.primaryClient = new OpenAI({ baseURL: openaiBaseUrl, apiKey: openaiKey });
+      this.primaryModel = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+      this.primaryName = 'OpenAI';
+      this.providerName = 'OpenAI';
+      this.model = this.primaryModel;
+      console.log('[AI] Using OpenAI API (model: ' + this.model + ', fallback: Ollama)');
+    } else {
+      this.providerName = 'Ollama';
+      this.model = this.fallbackModel;
+      console.log('[AI] Using Ollama (model: ' + this.model + ')');
+    }
   }
 
   private hasClient(): boolean {
-    return this.client !== null;
+    return this.cloudClient !== null || this.primaryClient !== null;
+  }
+
+  getModelInfo(): { provider: string; model: string } {
+    if (this.cloudClient) {
+      return { provider: this.cloudName, model: this.cloudModel };
+    }
+    if (this.primaryClient) {
+      return { provider: this.primaryName, model: this.primaryModel };
+    }
+    return { provider: 'Ollama', model: this.fallbackModel };
+  }
+
+  /**
+   * Calls the Ollama (or fallback) client for a chat completion, first WITH
+   * `response_format` then without it (some providers reject the option).
+   */
+  private async fallbackChatJsonWithModel(model: string, client: OpenAI, messages: { role: string; content: string }[]): Promise<string> {
+    const base = { model, messages: messages as any[] };
+    try {
+      const res = await client.chat.completions.create({ ...base, response_format: { type: 'json_object' } });
+      return res.choices[0]?.message?.content || '{}';
+    } catch {
+      try {
+        const res = await client.chat.completions.create(base as any);
+        return res.choices[0]?.message?.content || '{}';
+      } catch {
+        throw new Error('Chat completion failed on both JSON and plain paths.');
+      }
+    }
+  }
+
+  /**
+   * Runs the completion against the available clients in priority order
+   * (cloud LLM → primary → local Ollama). On ANY failure (network, TLS, auth,
+   * wallet, timeout) it transparently falls through so the AI Incident
+   * Commander stays functional even when a provider is down.
+   */
+  private async chatJson(messages: { role: string; content: string }[]): Promise<string> {
+    const clients: { client: OpenAI; model: string; name: string }[] = [];
+    if (this.cloudClient) clients.push({ client: this.cloudClient, model: this.cloudModel, name: this.cloudName });
+    if (this.primaryClient) clients.push({ client: this.primaryClient, model: this.primaryModel, name: this.primaryName });
+    if (this.fallbackClient) clients.push({ client: this.fallbackClient, model: this.fallbackModel, name: 'Ollama' });
+
+    let lastError: unknown = null;
+    for (const c of clients) {
+      try {
+        return await this.fallbackChatJsonWithModel(c.model, c.client, messages);
+      } catch (err) {
+        lastError = err;
+        if (c.name !== 'Ollama') {
+          console.warn(`[AI] Provider (${c.name}) failed; trying next:`, err instanceof Error ? err.message : err);
+        }
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error('No AI provider returned a response.');
+  }
+
+  /**
+   * Non-JSON chat completion with the same cloud→primary→Ollama fallback as
+   * chatJson. Returns the raw assistant text.
+   */
+  private async chatText(messages: { role: string; content: string }[]): Promise<string> {
+    const clients: { client: OpenAI; model: string; name: string }[] = [];
+    if (this.cloudClient) clients.push({ client: this.cloudClient, model: this.cloudModel, name: this.cloudName });
+    if (this.primaryClient) clients.push({ client: this.primaryClient, model: this.primaryModel, name: this.primaryName });
+    if (this.fallbackClient) clients.push({ client: this.fallbackClient, model: this.fallbackModel, name: 'Ollama' });
+
+    let lastError: unknown = null;
+    for (const c of clients) {
+      try {
+        const res = await c.client.chat.completions.create({ model: c.model, messages: messages as any[] });
+        return res.choices[0]?.message?.content || '';
+      } catch (err) {
+        lastError = err;
+        if (c.name !== 'Ollama') {
+          console.warn(`[AI] Provider (${c.name}) failed; trying next:`, err instanceof Error ? err.message : err);
+        }
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error('No AI provider returned a response.');
+  }
+
+  /**
+   * For non-JSON chat calls (status summaries, prompt replies, etc.) that use
+   * `this.client` directly, keep a property named `client` pointing at the
+   * primary (or fallback) so existing call sites compile and behave well.
+   */
+  private get client(): OpenAI | null {
+    if (this.cloudClient) return this.cloudClient;
+    if (this.primaryClient) return this.primaryClient;
+    return this.fallbackClient;
+  }
+
+  private set client(_value: OpenAI | null) {
+    // Read-only compatibility accessor.
   }
 
   async analyzeTranscriptSegment(input: {
@@ -138,21 +278,15 @@ export class OllamaProvider implements AIProvider {
     const userPrompt = this.buildAnalysisPrompt(input);
 
     try {
-      const response = await this.client!.chat.completions.create({
-        model: this.model,
-        messages: [
-          { role: 'system', content: AI_EVIDENCE_AWARE_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        response_format: { type: 'json_object' },
-      });
-
-      const content = response.choices[0].message.content || '{}';
-      const parsed = JSON.parse(content);
+      const content = await this.chatJson([
+        { role: 'system', content: AI_EVIDENCE_AWARE_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
+      ]);
+      const parsed = sanitizeAnalysis(safeParseJson(content));
       const result = AIAnalysisResultSchema.parse(parsed);
       return result;
     } catch (error: unknown) {
-      console.error('Error calling Ollama analyzeTranscriptSegment:', error instanceof Error ? error.message : error);
+      console.error(`Error calling ${this.providerName} analyzeTranscriptSegment:`, error instanceof Error ? error.message : error);
       return {
         facts: [],
         observations: [],
@@ -309,21 +443,17 @@ export class OllamaProvider implements AIProvider {
     }
 
     try {
-      const response = await this.client!.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Generate a short verbal status summary of the incident state. Summarize facts, active actions, and conflicting information concisely.',
-          },
-          {
-            role: 'user',
-            content: `Incident State:\n${incidentStateText}`,
-          },
-        ],
-      });
+      const text = await this.chatText([
+        {
+          role: 'system',
+          content: 'Generate a short verbal status summary of the incident state. Summarize facts, active actions, and conflicting information concisely.',
+        },
+        {
+          role: 'user',
+          content: `Incident State:\n${incidentStateText}`,
+        },
+      ]);
 
-      const text = response.choices[0].message.content || '';
       return { summary: text };
     } catch (error) {
       console.error('Error generating status summary:', error);
@@ -341,21 +471,18 @@ export class OllamaProvider implements AIProvider {
     }
 
     try {
-      const response = await this.client!.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Produce a comprehensive post-mortem style final incident summary including key facts, decisions made, and actions completed.',
-          },
-          {
-            role: 'user',
-            content: `Incident State:\n${incidentStateText}`,
-          },
-        ],
-      });
+      const summaryText = await this.chatText([
+        {
+          role: 'system',
+          content: 'Produce a comprehensive post-mortem style final incident summary including key facts, decisions made, and actions completed.',
+        },
+        {
+          role: 'user',
+          content: `Incident State:\n${incidentStateText}`,
+        },
+      ]);
 
-      return { summaryText: response.choices[0].message.content || '' };
+      return { summaryText };
     } catch (error) {
       console.error('Error generating final incident summary:', error);
       return { summaryText: 'Failed to generate final incident summary from AI.' };
@@ -368,21 +495,17 @@ export class OllamaProvider implements AIProvider {
     }
 
     try {
-      const response = await this.client!.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are the AI Incident Commander speaking aloud to an operator over a bridge. Answer their question concisely and conversationally, using the incident state as your source of truth. Reply in 2 to 4 short sentences, spoken-style, without markdown, headers, bullet points, or JSON.',
-          },
-          {
-            role: 'user',
-            content: `Incident State:\n${incidentStateText}\n\nOperator question: ${prompt}`,
-          },
-        ],
-      });
-      return (response.choices[0].message.content || '').trim();
+      return (await this.chatText([
+        {
+          role: 'system',
+          content:
+            'You are the AI Incident Commander speaking aloud to an operator over a bridge. Answer their question concisely and conversationally, using the incident state as your source of truth. Reply in 2 to 4 short sentences, spoken-style, without markdown, headers, bullet points, or JSON.',
+        },
+        {
+          role: 'user',
+          content: `Incident State:\n${incidentStateText}\n\nOperator question: ${prompt}`,
+        },
+      ])).trim();
     } catch (error) {
       console.error('Error generating prompt reply:', error);
       return 'I could not reach the language model right now. Please try again in a moment.';
@@ -410,16 +533,11 @@ Rules for the question:
 Respond ONLY with JSON: { "questionText": "...", "targetParticipantRole": "ENGINEER|SRE|SUPPORT|INCIDENT_COMMANDER" }`;
 
     try {
-      const response = await this.client!.chat.completions.create({
-        model: this.model,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: `Incident State:\n${incidentStateText}` },
-        ],
-        response_format: { type: 'json_object' },
-      });
-
-      const parsed = JSON.parse(response.choices[0].message.content || '{}');
+      const content = await this.chatJson([
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: `Incident State:\n${incidentStateText}` },
+      ]);
+      const parsed = safeParseJson(content);
       return {
         questionText: parsed.questionText || 'Could someone clarify the current status?',
         targetParticipantRole: parsed.targetParticipantRole,
@@ -486,28 +604,145 @@ Respond ONLY with JSON: { "questionText": "...", "targetParticipantRole": "ENGIN
     }
 
     try {
-      const response = await this.client!.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: 'system',
-            content: 'Determine if the following action is critical and requires human command approval (e.g. restarts, rollbacks, configuration updates, network changes). Identify the required approval role and state the reason.',
-          },
-          {
-            role: 'user',
-            content: `Action Title: ${actionTitle}\nDetails: ${actionDetails}`,
-          },
-        ],
-        response_format: { type: 'json_object' },
-      });
+      const content = await this.chatJson([
+        {
+          role: 'system',
+          content: 'Determine if the following action is critical and requires human command approval (e.g. restarts, rollbacks, configuration updates, network changes). Identify the required approval role and state the reason.',
+        },
+        {
+          role: 'user',
+          content: `Action Title: ${actionTitle}\nDetails: ${actionDetails}`,
+        },
+      ]);
 
-      const parsed = JSON.parse(response.choices[0].message.content || '{}');
+      const parsed = safeParseJson(content);
       return AICriticalActionSchema.parse(parsed);
     } catch (error) {
       console.error('Error classifying critical action:', error);
       return { isCritical: false, requiredApprovalRole: 'INCIDENT_COMMANDER', reason: 'Fallback to default classification.' };
     }
   }
+}
+
+const VALID_SOURCE_TYPES = [
+  'HUMAN_SPOKEN',
+  'MONITORING',
+  'DEPLOYMENT_SYSTEM',
+  'SLACK',
+  'JIRA',
+  'PAGERDUTY',
+  'MANUAL_CONFIRMATION',
+] as const;
+
+const VALID_FACT_STATUSES = ['CONFIRMED', 'REPORTED', 'UNCONFIRMED', 'CONFLICTING'] as const;
+
+/**
+ * Parses a raw LLM completion that may wrap valid JSON inside prose, markdown
+ * fences, or trailing commentary. Falls back to extracting the first balanced
+ * JSON object/array found. Returns {} when nothing parseable exists.
+ */
+function safeParseJson(content: string): any {
+  if (!content) return {};
+  const trimmed = content.trim();
+  // Try a strict parse first.
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    /* fall through */
+  }
+  // Strip markdown fences.
+  const fenced = trimmed.replace(/```(?:json)?/gi, '').trim();
+  try {
+    return JSON.parse(fenced);
+  } catch {
+    /* fall through */
+  }
+  // Extract the first {...} or [...] block (balanced scan).
+  const startMatch = fenced.search(/\{|\[/);
+  if (startMatch === -1) return {};
+  const open = fenced[startMatch];
+  const close = open === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = startMatch; i < fenced.length; i++) {
+    const ch = fenced[i];
+    if (inString) {
+      if (escape) { escape = false; }
+      else if (ch === '\\') { escape = true; }
+      else if (ch === '"') { inString = false; }
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) {
+        try {
+          return JSON.parse(fenced.slice(startMatch, i + 1));
+        } catch {
+          return {};
+        }
+      }
+    }
+  }
+  return {};
+}
+
+/**
+ * Coerces imperfect LLM JSON into something the strict Zod analysis schema will
+ * accept. Smaller local models (e.g. llama3.1 via Ollama) often emit slightly
+ * off values (wrong enum casing, missing fields, non-numeric confidence), which
+ * previously caused the whole segment to be dropped. Sanitizing is low-risk:
+ * it only normalizes known enums/required fields to safe defaults and never
+ * fabricates the core `statement`.
+ */
+function sanitizeAnalysis(raw: any): any {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      facts: [], observations: [], hypotheses: [], decisions: [],
+      actions: [], questions: [], risks: [], potentialConflicts: [],
+    };
+  }
+
+  const normalizeItem = (item: any): any => {
+    if (!item || typeof item !== 'object') return null;
+    const out: any = { ...item };
+
+    if (!VALID_SOURCE_TYPES.includes(out.sourceType)) {
+      out.sourceType = 'HUMAN_SPOKEN';
+    }
+    if (typeof out.confidence !== 'number' || Number.isNaN(out.confidence)) {
+      out.confidence = 0.7;
+    } else {
+      out.confidence = Math.min(1, Math.max(0, out.confidence));
+    }
+    if (typeof out.statement !== 'string' || !out.statement.trim()) {
+      out.statement = typeof raw?.statement === 'string' ? raw.statement : 'Extracted item';
+    }
+    if (typeof out.reasoningSummary !== 'string' || !out.reasoningSummary.trim()) {
+      out.reasoningSummary = 'Extracted from a live incident transcript segment.';
+    }
+    if (out.fact && !VALID_FACT_STATUSES.includes(out.fact.status)) {
+      out.fact = { ...out.fact, status: 'REPORTED' };
+    }
+    if (out.hypothesis && !VALID_FACT_STATUSES.includes(out.hypothesis.status)) {
+      out.hypothesis = { ...out.hypothesis, status: 'UNCONFIRMED' };
+    }
+    return out;
+  };
+
+  const sanitizeArray = (arr: any): any[] => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map(normalizeItem).filter(Boolean);
+  };
+
+  const topKeys: (keyof any)[] = ['facts', 'observations', 'hypotheses', 'decisions', 'actions', 'questions', 'risks', 'potentialConflicts'];
+  const result: any = {};
+  for (const key of topKeys) {
+    result[key] = sanitizeArray(raw[key]);
+  }
+  return result;
 }
 
 export const aiProvider = new OllamaProvider();
