@@ -92,8 +92,14 @@ export async function startAIVoiceParticipant(
       const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
       const source = audioCtx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(channelGain);
+      // Always play locally so the operator hears the AI on request. Also
+      // route into the Agora channel (when published) so remote participants
+      // hear it too. The duplicate/echo risk is handled by NOT having the
+      // commander agent re-subscribe this same AI participant's own track.
       source.connect(speakerGain);
+      if (client && publishedTrack) {
+        source.connect(channelGain);
+      }
       source.start();
     } catch {
       // The browser could not decode this payload (e.g. an unusual codec or an
