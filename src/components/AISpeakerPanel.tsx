@@ -89,10 +89,16 @@ async function playAudio(audioUrl: string, _fallbackText: string): Promise<void>
 }
 
 export function AISpeakerPanel({ incidentId, enabled = true, className = '' }: AISpeakerPanelProps) {
-  const { session, utterances, requestStatus } = useAISpeaker({
+  const [prompt, setPrompt] = useState('');
+  const [asking, setAsking] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const userRequestedSpeak = useRef(false);
+  const { session, utterances, requestStatus, refresh } = useAISpeaker({
     incidentId,
     enabled,
     onUtterance: (u) => {
+      if (!userRequestedSpeak.current) return;
+      userRequestedSpeak.current = false;
       if (u.audioUrl) {
         void playAudio(u.audioUrl, u.text).catch(() => speakTextLocal(u.text));
       } else {
@@ -100,21 +106,17 @@ export function AISpeakerPanel({ incidentId, enabled = true, className = '' }: A
       }
     },
   });
+
   const speaking = !!session?.speaking;
   const currentText = session?.currentText || null;
-  const [prompt, setPrompt] = useState('');
-  const [asking, setAsking] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Browsers block audio until the user has interacted with the page. Every
-  // button click below calls unlockAudio() so subsequent programmatic playback
-  // (triggered from the polling callback) is allowed to make sound.
   const speakAI = useCallback(async (e?: FormEvent) => {
     e?.preventDefault();
     unlockAudio();
     const q = (prompt || '').trim();
     if (!q || asking) return;
     setAsking(true);
+    userRequestedSpeak.current = true;
     try {
       await fetch(`/api/incidents/${incidentId}/ai/speak`, {
         method: 'POST',
@@ -122,14 +124,14 @@ export function AISpeakerPanel({ incidentId, enabled = true, className = '' }: A
         body: JSON.stringify({ mode: 'prompt', prompt: q }),
       });
       setPrompt('');
-      // The onUtterance playback above will voice the AI's reply.
+      await refresh().catch(() => {});
     } catch {
-      // Non-fatal — surfaced by the transcript/status that follows.
+      userRequestedSpeak.current = false;
     } finally {
       setAsking(false);
       inputRef.current?.focus();
     }
-  }, [incidentId, prompt, asking]);
+  }, [incidentId, prompt, asking, refresh]);
 
   const handleRequestStatus = useCallback(() => {
     unlockAudio();
