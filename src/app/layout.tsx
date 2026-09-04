@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import Providers from "./providers";
 
 const fontSans = Inter({
   variable: "--font-sans",
@@ -31,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="min-h-full flex flex-col font-sans bg-black text-white antialiased">
         <ThemeProvider>
-          {children}
+          <Providers>{children}</Providers>
         </ThemeProvider>
       </body>
     </html>
