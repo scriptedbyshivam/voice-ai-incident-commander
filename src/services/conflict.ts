@@ -1,6 +1,5 @@
 import prisma from '@/lib/db';
 import { EvidenceMetadata } from '@/types/incident';
-import { aiSpeakerService } from './aiSpeaker';
 
 export class ConflictService {
   async detectAndRecord(
@@ -35,10 +34,10 @@ export class ConflictService {
       },
     });
 
-    // AI spoken participation — major conflict detected is the #1 trigger.
-    aiSpeakerService
-      .evaluateAndSpeak(incidentId)
-      .catch((err) => console.warn('[ConflictService] AI speak evaluation failed:', err.message));
+    // AI spoken participation — disabled to prevent unprompted speech.
+    // aiSpeakerService
+    //   .evaluateAndSpeak(incidentId)
+    //   .catch((err) => console.warn('[ConflictService] AI speak evaluation failed:', err.message));
 
     return conflict;
   }
