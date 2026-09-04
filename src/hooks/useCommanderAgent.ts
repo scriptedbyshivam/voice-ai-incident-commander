@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AI_PARTICIPANT_UID } from '@/lib/agoraAIVoiceParticipant';
 
 export type CommanderAgentState =
   | 'idle'
@@ -32,6 +33,9 @@ export interface ConnectCommanderArgs {
   rtmToken?: string;
   agentUid: number;
   rtcClient: any;
+  /** The uid the local AI voice participant joins as — its audio is already
+   *  played locally, so the Commander must NOT re-play it (avoids 2 voices). */
+  aiVoiceUidToSkip?: number;
 }
 
 interface Runtime {
@@ -66,8 +70,13 @@ async function acquireRtm(
 ): Promise<any> {
   const { default: AgoraRTM } = await import('agora-rtm');
 
-  // Always enforce a fresh, collision-free RTM UID if not provided or to avoid -10027
-  const rtmUid = opts.rtmUid || `rtm-${requesterUid}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  // An RTC+RTM combined token (or a dedicated RTM token) is bound to ONE uid.
+  // Logging in as any OTHER uid with that token fails Agora's signature check
+  // (-10005 / NO_AUTHORIZED). So:
+  //   - Use the dedicated commander rtmUid+rtmToken pair when provided.
+  //   - Otherwise login as the requester itself with the combined token (the
+  //     uid the token was minted for). Never spin up a mismatched random uid.
+  const rtmUid = opts.rtmUid || requesterUid;
   const rtmToken = opts.rtmToken || token;
 
   // Cleanup any lingering inactive RTM instance
@@ -86,14 +95,10 @@ async function acquireRtm(
     rtmSingleton = { rtm, appId, uid: rtmUid, inUse: true };
     return rtm;
   } catch (err: any) {
-    // If -10027 (SAME_UID_LOGIN) occurs, fallback to a 100% unique random UID retry
-    if (err?.code === -10027 || err?.message?.includes('-10027') || err?.message?.includes('already in use')) {
-      const retryUid = `rtm-retry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const retryRtm = new AgoraRTM.RTM(appId, retryUid);
-      await retryRtm.login({ token: rtmToken });
-      rtmSingleton = { rtm: retryRtm, appId, uid: retryUid, inUse: true };
-      return retryRtm;
-    }
+    // -10027 (SAME_UID_LOGIN) - another RTM session already holds this uid. With
+    // a dedicated commander rtmUid+rtmToken this is unexpected (uid is unique per
+    // request), so surface it. Falling back to a *different* uid would reuse a
+    // token that only authorises the original uid, which cannot work.
     throw err;
   }
 }
@@ -170,6 +175,7 @@ export function useCommanderAgent() {
       });
 
       const fromCallbacks = {
+        setState,
         setEntries,
         setPresence,
         setAgentOnline,
@@ -216,6 +222,11 @@ export function useCommanderAgent() {
 
       const onUserPublished = async (user: any, mediaType: string) => {
         if (mediaType !== 'audio') return;
+        // Skip the local AI voice participant — it already plays its own audio
+        // locally via speakerGain. Playing it again here would cause a
+        // duplicate AI voice.
+        const aiVoiceUid = args.aiVoiceUidToSkip ?? AI_PARTICIPANT_UID;
+        if (String(user.uid) === String(aiVoiceUid) || String(user.uid) === String(AI_PARTICIPANT_UID)) return;
         try {
           await rtcClient.subscribe(user, mediaType);
           user.audioTrack?.play?.();
@@ -225,7 +236,11 @@ export function useCommanderAgent() {
         if (String(user.uid) === agentUid) fromCallbacks.setAgentOnline(true);
       };
       const onUserLeft = (user: any) => {
-        if (String(user.uid) === agentUid) fromCallbacks.setAgentOnline(false);
+        if (String(user.uid) === agentUid) {
+          fromCallbacks.setAgentOnline(false);
+          // Agent left the channel — reset commander state so user can reconnect.
+          fromCallbacks.setState('idle');
+        }
       };
       rtcClient.on('user-published', onUserPublished);
       rtcClient.on('user-left', onUserLeft);
@@ -277,8 +292,8 @@ export function useCommanderAgent() {
       rtcClient.off('user-left', runtime.onUserLeft);
     }
     try {
-      runtime.ai?.unsubscribeMessage(runtime.channel);
-      runtime.ai?.destroy();
+      runtime.ai.unsubscribe();
+      runtime.ai.destroy();
     } catch (err) {
       console.warn('[CommanderAgent] ai cleanup:', err);
     }
@@ -309,8 +324,8 @@ export function useCommanderAgent() {
         rtcClient.off('user-left', runtime.onUserLeft);
       }
       try {
-        runtime.ai?.unsubscribeMessage?.(runtime.channel);
-        runtime.ai?.destroy();
+        runtime.ai.unsubscribe();
+        runtime.ai.destroy();
       } catch {}
       try {
         releaseRtm(runtime.rtm);
