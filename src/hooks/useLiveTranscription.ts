@@ -22,6 +22,8 @@ export interface UseLiveTranscriptionOptions {
   userName: string;
   userRole?: string;
   enabled?: boolean;
+  /** When true, the microphone/STT capture is stopped (user muted their mic). */
+  muted?: boolean;
 }
 
 const WS_URL = process.env.TRANSCRIPTION_WS_URL || '';
@@ -44,6 +46,7 @@ export function useLiveTranscription({
   userName,
   userRole = 'ENGINEER',
   enabled = true,
+  muted = false,
 }: UseLiveTranscriptionOptions) {
   const [status, setStatus] = useState<TranscriptionStatus>({ status: 'idle' });
   const [segments, setSegments] = useState<LiveTranscriptSegment[]>([]);
@@ -52,6 +55,7 @@ export function useLiveTranscription({
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const recognitionRef = useRef<any | null>(null);
+  const mutedRef = useRef(muted);
 
   const sendTranscriptToBackend = useCallback(async (text: string, isFinal: boolean) => {
     if (!incidentId || !text.trim() || !isFinal) return;
@@ -151,8 +155,8 @@ export function useLiveTranscription({
       };
 
       recognition.onend = () => {
-        // Auto-restart if still enabled
-        if (enabled && recognitionRef.current) {
+        // Auto-restart if still enabled and not muted (muting stops capture).
+        if (enabled && !mutedRef.current && recognitionRef.current) {
           try { recognition.start(); } catch {}
         }
       };
@@ -164,7 +168,7 @@ export function useLiveTranscription({
   }, [enabled, userName, userRole, sendTranscriptToBackend]);
 
   const connect = useCallback(async () => {
-    if (!enabled || !incidentId || !userName) return;
+    if (!enabled || !incidentId || !userName || mutedRef.current) return;
 
     setStatus({ status: 'connecting', message: 'Requesting microphone access...' });
 
@@ -308,6 +312,22 @@ export function useLiveTranscription({
       cleanup();
     };
   }, [incidentId, userName, userRole, enabled, connect, disconnect, cleanup]);
+
+  // React to mic mute: stop mic/STT capture while muted, restart on unmute.
+  // Never clears the existing transcript — only halts local capture.
+  useEffect(() => {
+    const wasMuted = mutedRef.current;
+    mutedRef.current = muted;
+    if (muted === wasMuted) return;
+    if (muted) {
+      cleanup();
+      /* eslint-disable react-hooks/set-state-in-effect */
+      setStatus({ status: 'idle', message: 'Microphone muted' });
+      /* eslint-enable react-hooks/set-state-in-effect */
+    } else if (enabled) {
+      connect();
+    }
+  }, [muted, enabled, connect, cleanup]);
 
   return {
     status,
