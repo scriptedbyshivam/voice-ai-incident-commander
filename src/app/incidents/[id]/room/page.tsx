@@ -11,7 +11,7 @@ import {
   Mic, MicOff, PhoneOff, Subtitles, Hand,
   Users, Sparkles, ShieldAlert, X,
   ArrowLeft, Bot, FileText, CheckCircle2, AlertTriangle, Download, ArrowRight,
-  Flame, Clock
+  Flame, Clock, Volume2, VolumeX
 } from 'lucide-react';
 
 interface ActiveParticipant {
@@ -38,6 +38,7 @@ export default function VoiceRoom({ params }: PageProps) {
   const [connecting, setConnecting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'Disconnected' | 'Connecting' | 'Connected' | 'Reconnecting'>('Disconnected');
   const [isMuted, setIsMuted] = useState(false);
+  const [aiVoiceMuted, setAiVoiceMuted] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
   const [activeSideDrawer, setActiveSideDrawer] = useState<'captions' | 'people' | null>('captions');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -101,6 +102,7 @@ export default function VoiceRoom({ params }: PageProps) {
     userName: userName || 'Operator',
     userRole,
     enabled: joined,
+    muted: isMuted,
   });
 
   const commander = useCommanderAgent();
@@ -274,6 +276,13 @@ export default function VoiceRoom({ params }: PageProps) {
     }
   };
 
+  const toggleAIVoiceMute = () => {
+    const next = !aiVoiceMuted;
+    setAiVoiceMuted(next);
+    if (aiVoiceRef.current) aiVoiceRef.current.setMuted(next);
+    commander.setAgentMuted(next);
+  };
+
   // Google Meet Pre-join Screen
   if (!joined && !showSummaryModal) {
     return (
@@ -424,6 +433,7 @@ export default function VoiceRoom({ params }: PageProps) {
           {participants.map((p) => {
             const isAi = p.uid === String(AI_PARTICIPANT_UID);
             const isSpeaking = isAi ? !!aiParticipant.session?.speaking : p.isSpeaking;
+            const showMuted = isAi ? aiVoiceMuted : p.isMuted;
 
             return (
               <div
@@ -453,7 +463,7 @@ export default function VoiceRoom({ params }: PageProps) {
 
                 {/* Bottom Right Mic Status Badge */}
                 <div className="absolute bottom-4 right-4 bg-black/60 backdrop-blur-md p-2 rounded-full border border-white/10">
-                  {p.isMuted ? (
+                  {showMuted ? (
                     <MicOff className="w-4 h-4 text-red-400" />
                   ) : (
                     <Mic className="w-4 h-4 text-green-400" />
@@ -535,7 +545,13 @@ export default function VoiceRoom({ params }: PageProps) {
                         </div>
                       </div>
                       <div>
-                        {p.isMuted ? (
+                        {p.uid === String(AI_PARTICIPANT_UID) ? (
+                          aiVoiceMuted ? (
+                            <MicOff className="w-4 h-4 text-red-400" />
+                          ) : (
+                            <Mic className="w-4 h-4 text-green-400" />
+                          )
+                        ) : p.isMuted ? (
                           <MicOff className="w-4 h-4 text-red-400" />
                         ) : (
                           <Mic className="w-4 h-4 text-green-400" />
@@ -587,6 +603,15 @@ export default function VoiceRoom({ params }: PageProps) {
           title="AI Incident Commander Assistant"
         >
           <Sparkles className={`w-5 h-5 ${commander.state === 'running' ? 'animate-spin text-[#8ab4f8]' : ''}`} />
+        </button>
+
+        {/* Mute / Unmute the AI's voice */}
+        <button
+          onClick={toggleAIVoiceMute}
+          className={`gmeet-btn-icon ${aiVoiceMuted ? 'gmeet-btn-danger' : ''}`}
+          title={aiVoiceMuted ? 'Unmute AI voice' : 'Mute AI voice'}
+        >
+          {aiVoiceMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
         </button>
 
         {/* People / Participants List */}
