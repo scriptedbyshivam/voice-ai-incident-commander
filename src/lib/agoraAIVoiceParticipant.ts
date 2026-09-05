@@ -17,7 +17,23 @@ export interface AIVoiceParticipantHandle {
   speak: (utterance: { text: string; audioUrl?: string | null }) => Promise<void>;
   /** True when the AI is actively publishing audio into the channel. */
   isLive: boolean;
+  /** Mute/unmute the AI's audible output (local speakers + channel publish). */
+  setMuted: (muted: boolean) => void;
+  /** True while the AI's audible output is silenced. */
+  isMuted: boolean;
   dispose: () => Promise<void>;
+}
+
+// Global mute gate shared across every AI voice participant + the browser TTS
+// fallback, so a mute from any control silences every local AI voice path.
+let aiSpeechMuted = false;
+
+export function isAiSpeechMuted(): boolean {
+  return aiSpeechMuted;
+}
+
+export function setAiSpeechMuted(muted: boolean): void {
+  aiSpeechMuted = muted;
 }
 
 /**
@@ -26,7 +42,7 @@ export interface AIVoiceParticipantHandle {
  * AI Incident Commander audible with zero external dependencies.
  */
 export function speakTextLocal(text: string): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || aiSpeechMuted) return;
   const synth = window.speechSynthesis;
   if (!synth) return;
   synth.cancel();
@@ -62,6 +78,7 @@ export async function startAIVoiceParticipant(
   let client: any = null;
   let publishedTrack: any = null;
   let disposed = false;
+  let muted = aiSpeechMuted;
 
   // Try to join the real Agora channel with the AI's dedicated identity. A
   // join failure (e.g. UID_CONFLICT, network) must never block local playback,
@@ -86,10 +103,11 @@ export async function startAIVoiceParticipant(
   }
 
   const playBuffer = async (arrayBuffer: ArrayBuffer) => {
-    if (disposed || audioCtx.state === 'closed') return;
+    if (disposed || muted || audioCtx.state === 'closed') return;
     if (audioCtx.state === 'suspended') await audioCtx.resume().catch(() => {});
     try {
       const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      if (muted) return;
       const source = audioCtx.createBufferSource();
       source.buffer = audioBuffer;
       // Always play locally so the operator hears the AI on request. Also
@@ -110,6 +128,7 @@ export async function startAIVoiceParticipant(
   };
 
   const tryPlayUrl = async (url: string): Promise<boolean> => {
+    if (muted) return false;
     try {
       const res = await fetch(url);
       if (!res.ok) return false;
@@ -123,10 +142,24 @@ export async function startAIVoiceParticipant(
 
   return {
     isLive: !!(client && publishedTrack),
+    get isMuted() {
+      return muted;
+    },
+    setMuted: (m: boolean) => {
+      muted = m;
+      setAiSpeechMuted(m);
+      speakerGain.gain.value = m ? 0 : 1;
+      channelGain.gain.value = m ? 0 : 1;
+      if (m && typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    },
     speakUrl: async (url) => {
+      if (muted) return;
       await tryPlayUrl(url);
     },
     speak: async ({ text, audioUrl }) => {
+      if (muted) return;
       const played = audioUrl ? await tryPlayUrl(audioUrl) : false;
       if (!played) speakTextLocal(text);
     },
