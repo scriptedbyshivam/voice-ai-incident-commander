@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState, FormEvent } from 'react';
 import { useAISpeaker } from '@/hooks/useAISpeaker';
 import { AudioVisualizer } from '@/components/AudioVisualizer';
-import { AudioLines, Volume2, Send, Sparkles, RefreshCcw } from 'lucide-react';
+import { AudioLines, Volume2, VolumeX, Send, Sparkles, RefreshCcw } from 'lucide-react';
 
 interface AISpeakerPanelProps {
   incidentId: string;
@@ -29,7 +29,7 @@ function toAbsoluteUrl(url: string): string {
 
 /** Best-effort local browser speech fallback when no server audio decodes. */
 function speakTextLocal(text: string): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || aiAudioMuted) return;
   const synth = window.speechSynthesis;
   if (!synth) return;
   synth.cancel();
@@ -64,16 +64,35 @@ function unlockAudio(): void {
 
 let activeSource: AudioBufferSourceNode | null = null;
 
+// AI audio mute gate shared across every panel instance on this page.
+let aiAudioMuted = false;
+
+function setAiAudioMuted(muted: boolean): void {
+  aiAudioMuted = muted;
+  if (muted) {
+    try {
+      activeSource?.stop();
+    } catch {
+      /* already stopped */
+    }
+    activeSource = null;
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  }
+}
+
 /** Fetch + decode a server MP3 and play it through the (unlocked) context. */
 async function playAudio(audioUrl: string, _fallbackText: string): Promise<void> {
   void _fallbackText;
-  if (typeof window === 'undefined' || !audioCtx || !ctxUnlocked) {
+  if (typeof window === 'undefined' || aiAudioMuted || !audioCtx || !ctxUnlocked) {
     return Promise.reject(new Error('Audio not unlocked yet'));
   }
   const res = await fetch(toAbsoluteUrl(audioUrl));
   if (!res.ok) throw new Error('Audio fetch failed');
   const buffer = await res.arrayBuffer();
   const audioBuffer = await audioCtx.decodeAudioData(buffer);
+  if (aiAudioMuted) return;
   const source = audioCtx.createBufferSource();
   source.buffer = audioBuffer;
   source.connect(audioCtx.destination);
@@ -91,13 +110,14 @@ async function playAudio(audioUrl: string, _fallbackText: string): Promise<void>
 export function AISpeakerPanel({ incidentId, enabled = true, className = '' }: AISpeakerPanelProps) {
   const [prompt, setPrompt] = useState('');
   const [asking, setAsking] = useState(false);
+  const [aiMuted, setAiMuted] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const userRequestedSpeak = useRef(false);
   const { session, utterances, requestStatus, refresh } = useAISpeaker({
     incidentId,
     enabled,
     onUtterance: (u) => {
-      if (!userRequestedSpeak.current) return;
+      if (!userRequestedSpeak.current || aiAudioMuted) return;
       userRequestedSpeak.current = false;
       if (u.audioUrl) {
         void playAudio(u.audioUrl, u.text).catch(() => speakTextLocal(u.text));
@@ -109,6 +129,12 @@ export function AISpeakerPanel({ incidentId, enabled = true, className = '' }: A
 
   const speaking = !!session?.speaking;
   const currentText = session?.currentText || null;
+
+  const toggleAiMute = useCallback(() => {
+    const next = !aiMuted;
+    setAiMuted(next);
+    setAiAudioMuted(next);
+  }, [aiMuted]);
 
   const speakAI = useCallback(async (e?: FormEvent) => {
     e?.preventDefault();
@@ -167,9 +193,23 @@ export function AISpeakerPanel({ incidentId, enabled = true, className = '' }: A
           <span className={`w-1.5 h-1.5 rounded-full ${speaking ? 'bg-green-400 animate-pulse' : 'bg-white/30'}`} />
           {speaking ? 'Speaking' : 'Idle'}
         </span>
+
+        {/* Mute / Unmute the AI's voice */}
+        <button
+          onClick={toggleAiMute}
+          title={aiMuted ? 'Unmute AI voice' : 'Mute AI voice'}
+          className={`flex items-center justify-center w-9 h-9 rounded-full border transition-colors ${
+            aiMuted
+              ? 'bg-red-500/15 text-red-400 border-red-500/40 hover:bg-red-500/25'
+              : 'bg-white/5 text-white/60 border-white/10 hover:bg-white/10 hover:text-white'
+          }`}
+          aria-pressed={aiMuted}
+        >
+          {aiMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+        </button>
       </div>
 
-      <AudioVisualizer isSpeaking={speaking} isMuted={false} />
+      <AudioVisualizer isSpeaking={speaking} isMuted={aiMuted} />
 
       <form onSubmit={speakAI} className="flex items-center gap-2">
         <div className="relative flex-1 min-w-0">
