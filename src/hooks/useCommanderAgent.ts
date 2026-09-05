@@ -128,12 +128,38 @@ export function useCommanderAgent() {
   const [agentId, setAgentId] = useState<string | null>(null);
   const [presence, setPresence] = useState<CommanderAgentPresence>('idle');
   const [agentOnline, setAgentOnline] = useState(false);
+  const [agentMuted, setAgentMutedState] = useState(false);
   const [entries, setEntries] = useState<AgentTranscriptEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const runtimeRef = useRef<Runtime | null>(null);
   const rtcClientRef = useRef<any>(null);
   const agentUidRef = useRef<number>(0);
+  const agentAudioTrackRef = useRef<any>(null);
+  const agentMutedRef = useRef(false);
+
+  const applyAgentMute = useCallback((muted: boolean) => {
+    agentMutedRef.current = muted;
+    const track = agentAudioTrackRef.current;
+    if (!track) return;
+    try {
+      if (typeof track.setEnabled === 'function') {
+        track.setEnabled(!muted);
+      } else if (typeof track.setVolume === 'function') {
+        track.setVolume(muted ? 0 : 100);
+      }
+    } catch {
+      /* best effort */
+    }
+  }, []);
+
+  const setAgentMuted = useCallback(
+    (muted: boolean) => {
+      setAgentMutedState(muted);
+      applyAgentMute(muted);
+    },
+    [applyAgentMute]
+  );
 
   const connectAgent = useCallback(async (args: ConnectCommanderArgs) => {
     if (runtimeRef.current && !runtimeRef.current.disposed) return;
@@ -229,6 +255,14 @@ export function useCommanderAgent() {
         if (String(user.uid) === String(aiVoiceUid) || String(user.uid) === String(AI_PARTICIPANT_UID)) return;
         try {
           await rtcClient.subscribe(user, mediaType);
+          if (String(user.uid) === agentUid) {
+            agentAudioTrackRef.current = user.audioTrack || null;
+            if (agentMutedRef.current) {
+              try {
+                user.audioTrack?.setEnabled?.(false);
+              } catch {}
+            }
+          }
           user.audioTrack?.play?.();
         } catch (err) {
           console.warn('[CommanderAgent] remote audio subscribe failed:', err);
@@ -306,6 +340,9 @@ export function useCommanderAgent() {
     runtimeRef.current = null;
     rtcClientRef.current = null;
     agentUidRef.current = 0;
+    agentAudioTrackRef.current = null;
+    agentMutedRef.current = false;
+    setAgentMutedState(false);
     setEntries([]);
     setPresence('idle');
     setAgentOnline(false);
@@ -340,9 +377,11 @@ export function useCommanderAgent() {
     agentId,
     presence,
     agentOnline,
+    agentMuted,
     entries,
     error,
     connectAgent,
     disconnectAgent,
+    setAgentMuted,
   };
 }
